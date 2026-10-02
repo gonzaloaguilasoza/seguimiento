@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f4038">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mastermind">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="img/icon-180.png">
+<link rel="icon" href="img/icon-192.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Seguimiento Mastermind</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: app de bolsillo — barra inferior en celular, barra lateral + lista/detalle en computador. Fondo blanco, verde RIMAN como único acento. */
+:root{
+  color-scheme: light;
+  --bg:#ffffff;
+  --surface:#f5f7f5;
+  --sage:#e7ede8;
+  --line:#e2e7e3;
+  --ink:#1f2a25;
+  --muted:#66736c;
+  --green:#2f4038;
+  --green-2:#4c6a5b;
+  --on-green:#ffffff;
+  --cold:#5b8fb9;
+  --warm:#d9a441;
+  --hot:#c4553d;
+  --ok:#3f7d5a;
+  --warn:#a8701a;
+  --warn-bg:#fbf3e4;
+  --err:#a8432f;
+  --err-bg:#f9ebe7;
+  --font-display:"Marcellus","Cormorant Garamond",Georgia,serif;
+  --font-body:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:14px;
+}
+*{box-sizing:border-box}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--green)}
+:focus-visible{outline:2px solid var(--green-2);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0;text-wrap:balance}
+.display{font-family:var(--font-display);font-weight:400;letter-spacing:.01em}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+
+/* Logos (tinta negra recortada, coloreada con máscara) */
+.logo{display:block;background:var(--green);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-position:left center;mask-position:left center}
+.logo.riman{-webkit-mask-image:url(img/riman.png);mask-image:url(img/riman.png);aspect-ratio:656/120}
+.logo.kwam{-webkit-mask-image:url(img/kwam.png);mask-image:url(img/kwam.png);aspect-ratio:874/120;background:var(--ink)}
+.logos{display:flex;align-items:center;gap:14px}
+.logos .sep{width:1px;height:18px;background:var(--line)}
+
+/* Shell */
+#app{min-height:100%}
+.shell{display:flex;min-height:100%}
+.side{display:none}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.top .logos .logo.riman{height:15px}
+.top .logos .logo.kwam{height:11px}
+.content{padding:18px 16px 110px;width:100%;max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--bg);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
+.tab{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted);padding:6px 0;font-weight:600}
+.tab svg{width:22px;height:22px}
+.tab.on{color:var(--green)}
+.tab.plus span.fab{width:46px;height:46px;border-radius:50%;background:var(--green);color:var(--on-green);display:grid;place-items:center;margin-top:-18px;box-shadow:0 6px 16px rgba(47,64,56,.28)}
+.tab.plus span.fab svg{width:24px;height:24px}
+.demo-badge{font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-bg);border-radius:20px;padding:3px 10px;white-space:nowrap}
+
+@media (min-width:900px){
+  .side{display:flex;flex-direction:column;gap:26px;width:240px;flex:none;border-right:1px solid var(--line);padding:26px 18px;position:sticky;top:0;height:100vh;background:var(--bg)}
+  .side .logo.riman{height:20px}
+  .side .logo.kwam{height:13px}
+  .side nav{display:flex;flex-direction:column;gap:4px}
+  .side .nav{display:flex;align-items:center;gap:12px;border:0;background:none;padding:10px 12px;border-radius:10px;font-weight:600;color:var(--muted);text-align:left}
+  .side .nav svg{width:20px;height:20px}
+  .side .nav.on{background:var(--sage);color:var(--green)}
+  .side .btn{margin-top:4px}
+  .side .who{margin-top:auto;font-size:13px;color:var(--muted)}
+  .tabbar{display:none}
+  .top .logos{display:none}
+  .content{padding:28px 32px 60px;max-width:1100px}
+  .split{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:24px;align-items:start}
+  .split>.detail-pane{position:sticky;top:84px}
+}
+
+/* Buttons & inputs */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:1px solid var(--green);background:var(--green);color:var(--on-green);padding:12px 18px;font-weight:700;text-decoration:none;min-height:46px;text-align:center}
+.btn.ghost{background:var(--bg);color:var(--green)}
+.btn.soft{background:var(--sage);border-color:var(--sage);color:var(--green)}
+.btn.wa{background:#1f8f55;border-color:#1f8f55}
+.btn.block{width:100%}
+.btn.sm{min-height:36px;padding:7px 12px;font-size:13px;border-radius:10px}
+.btn.danger{background:var(--bg);border-color:var(--err);color:var(--err)}
+.btn svg{width:18px;height:18px;flex:none}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row>.btn{flex:1 1 140px}
+label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+.in{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px 14px;font-size:16px;color:var(--ink);min-height:46px}
+.in:focus{border-color:var(--green-2);outline:none;box-shadow:0 0 0 3px var(--sage)}
+textarea.in{min-height:96px;resize:vertical;line-height:1.45}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--ink)}
+.chip.on{background:var(--green);border-color:var(--green);color:var(--on-green)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--surface);border-radius:12px;padding:4px;gap:4px}
+.seg button{border:0;background:none;border-radius:9px;padding:9px;font-weight:700;color:var(--muted)}
+.seg button.on{background:var(--bg);color:var(--green);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+.pw{position:relative;display:block}
+.pw .in{padding-right:52px}
+.pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:44px;height:40px;border:0;background:none;color:var(--muted);display:grid;place-items:center;border-radius:10px}
+.pw-eye svg{width:22px;height:22px}
+.pw-eye .slash{display:none}
+.pw-eye.on{color:var(--green)}
+.pw-eye.on .slash{display:inline}
+/* Cards & lists */
+.card{border:1px solid var(--line);border-radius:var(--r);padding:16px;background:var(--bg);display:flex;flex-direction:column;gap:12px}
+.card.tint{background:var(--surface);border-color:transparent}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.sec-h h2{font-size:17px;font-weight:700}
+.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.item{display:flex;align-items:center;gap:12px;padding:12px 14px;border:0;border-bottom:1px solid var(--line);background:var(--bg);width:100%;text-align:left}
+.item:last-child{border-bottom:0}
+.item.sel{background:var(--surface)}
+.item .grow{flex:1;min-width:0}
+.item .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .meta{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.av{width:38px;height:38px;border-radius:50%;background:var(--sage);color:var(--green);display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.tdot{width:10px;height:10px;border-radius:50%;flex:none}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;background:var(--sage);color:var(--green);white-space:nowrap}
+.pill.hot{background:#f8e4df;color:var(--hot)}
+.pill.cierre{background:var(--green);color:var(--on-green)}
+.pill.plan{background:#eef0e6;color:#5d6431}
+.empty{padding:22px;text-align:center;color:var(--muted);font-size:14px}
+
+/* Hoy */
+.hello h1{font-size:28px}
+.alert{display:flex;gap:12px;align-items:flex-start;border-radius:var(--r);padding:14px;background:#fbefe9;color:#6f2f20}
+.alert b{color:var(--hot)}
+.task{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.task>button.th{width:100%;display:flex;align-items:center;gap:12px;border:0;background:var(--bg);padding:14px;text-align:left}
+.task .cnt{min-width:34px;height:34px;border-radius:10px;background:var(--green);color:var(--on-green);display:grid;place-items:center;font-weight:700}
+.task .cnt.q{background:var(--warm);color:#fff}
+.task .cnt.r{background:var(--sage);color:var(--green)}
+.task .tt{flex:1;min-width:0}
+.task .tt b{display:block}
+.task .tt span{font-size:12.5px;color:var(--muted)}
+.task .tb{border-top:1px solid var(--line);display:flex;flex-direction:column}
+.task .tb .item{border-bottom:1px solid var(--line)}
+.ask{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.ask:last-child{border-bottom:0}
+.ask .row .btn{flex:1 1 90px}
+
+/* Embudo */
+.funnel{display:flex;flex-direction:column;gap:6px}
+.fr{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;border:0;background:none;padding:6px 4px;border-radius:10px;text-align:left;width:100%}
+.fr.on{background:var(--surface)}
+.fr .n{font-weight:700;color:var(--muted);text-align:center}
+.fr .bw{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fr .bl{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr .bar{height:12px;border-radius:6px;background:var(--surface);overflow:hidden}
+.fr .bar i{display:block;height:100%;border-radius:6px;background:var(--green-2)}
+.fr .c{font-weight:700;font-size:18px;min-width:30px;text-align:right}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--surface);border-radius:12px;padding:12px}
+.stat b{display:block;font-size:22px}
+.stat span{font-size:12px;color:var(--muted)}
+
+/* Ficha */
+.ficha-h{display:flex;gap:14px;align-items:center}
+.ficha-h .av{width:52px;height:52px;font-size:17px}
+.ficha-h h2{font-size:22px}
+.steps{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.steps i{height:6px;border-radius:3px;background:var(--line)}
+.steps i.d{background:var(--green-2)}
+.steps i.c{background:var(--green)}
+.stepcard{border:1.5px solid var(--green);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
+.stepcard h3{font-size:19px}
+.instr{background:var(--surface);border-radius:12px;padding:12px 14px;font-size:14px}
+.instr ol{margin:6px 0 0;padding-left:20px}
+.anchor-note{background:var(--sage);border-radius:12px;padding:10px 12px;font-size:13.5px;color:var(--green)}
+.thermo{display:flex;flex-direction:column;gap:8px}
+.thermo input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--cold),var(--warm),var(--hot));outline:none}
+.thermo input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:var(--bg);border:3px solid var(--green);box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.thermo input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:var(--bg);border:3px solid var(--green)}
+.thermo .tv{display:flex;justify-content:space-between;align-items:baseline}
+.thermo .tv b{font-size:26px}
+.reply{background:var(--surface);border-radius:12px;padding:12px 14px;font-size:14px;white-space:pre-wrap}
+.rutina{border-radius:12px;border:1px solid var(--line);width:100%;height:auto}
+.calc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.calc div{background:var(--surface);border-radius:12px;padding:10px;text-align:center}
+.calc b{display:block;font-size:17px}
+.calc span{font-size:11.5px;color:var(--muted)}
+.hist{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.back{border:0;background:none;color:var(--green);font-weight:700;padding:0;display:inline-flex;align-items:center;gap:4px}
+
+/* Sheet / modal */
+.sheet-bg{position:fixed;inset:0;background:rgba(20,28,24,.4);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 16px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+@media (min-width:700px){.sheet-bg{align-items:center}.sheet{border-radius:20px;padding:24px}}
+.sheet h2{font-size:20px}
+.warn{background:var(--warn-bg);color:#6e4a10;border-radius:12px;padding:10px 12px;font-size:13.5px}
+.err{background:var(--err-bg);color:#6e2a1d;border-radius:12px;padding:10px 12px;font-size:13.5px}
+.okb{background:var(--sage);color:var(--green);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.guide{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:var(--surface);border-radius:12px;padding:12px}
+.phone-mini{width:64px;border:2px solid var(--ink);border-radius:12px;padding:6px 5px;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--bg)}
+.phone-mini i{display:block;width:26px;height:26px;border-radius:50%;background:var(--sage)}
+.phone-mini b{display:block;width:40px;height:5px;border-radius:3px;background:var(--ink)}
+.phone-mini s{display:block;width:32px;height:4px;border-radius:2px;background:var(--green-2)}
+.progress{height:6px;border-radius:3px;background:var(--surface);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--green-2);transition:width .3s}
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:40;max-width:calc(100% - 32px);text-align:center}
+@media (min-width:900px){.toast{bottom:28px}}
+
+/* Auth & test (pantallas completas de marca) */
+.brand-page{min-height:100%;display:flex;flex-direction:column;align-items:center;padding:28px 16px 40px;background:linear-gradient(180deg,var(--sage) 0,var(--bg) 300px)}
+.brand-page .logos{justify-content:center;gap:18px;margin:10px 0 26px}
+.brand-page .logo.riman{height:24px}
+.brand-page .logo.kwam{height:15px}
+.brand-page .logos .sep{height:24px}
+.panel{width:100%;max-width:440px;display:flex;flex-direction:column;gap:14px}
+.panel h1{font-size:30px;text-align:center}
+.panel .lead{text-align:center;color:var(--muted)}
+.linkbtn{border:0;background:none;color:var(--green);font-weight:700;padding:4px}
+.opt{width:100%;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:14px;padding:15px 16px;font-weight:600;font-size:15.5px}
+.opt:hover{border-color:var(--green-2)}
+.opt.on{border-color:var(--green);background:var(--sage);color:var(--green)}
+.q{font-size:24px;line-height:1.25}
+.final{text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center;padding-top:10px}
+.final .seal{width:74px;height:74px;border-radius:50%;background:var(--green);display:grid;place-items:center;color:#fff}
+.final .seal svg{width:34px;height:34px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+
+<div id="app"></div>
+<div id="sheet-root"></div>
+<div id="toast-root"></div>
+
+<script src="vendor/tesseract.min.js"></script>
+<script>
+/* ============ Utilidades ============ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today = () => { const d=new Date(); d.setHours(0,0,0,0); return d; };
+const iso = d => { const x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); };
+const TODAY = iso(today());
+const addDays = (s,n) => { const d=new Date(s+'T00:00:00'); d.setDate(d.getDate()+n); return iso(d); };
+const fmtDate = s => { if(!s) return ''; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('es',{weekday:'short',day:'numeric',month:'short'}); };
+const initials = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+const uid = () => Math.random().toString(36).slice(2,10);
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem('sm_'+k); return v?JSON.parse(v):d; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem('sm_'+k,JSON.stringify(v)); }catch(e){} }
+};
+function toast(msg){ const r=$('#toast-root'); r.innerHTML=`<div class="toast">${esc(msg)}</div>`; clearTimeout(toast.t); toast.t=setTimeout(()=>r.innerHTML='',2600); }
+function copyText(t){
+  try{ navigator.clipboard.writeText(t).then(()=>toast('Copiado'),()=>fallbackCopy(t)); }catch(e){ fallbackCopy(t); }
+}
+function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); toast('Copiado');}catch(e){toast('Mantén presionado el texto para copiarlo');} ta.remove(); }
+
+const IC = {
+  hoy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17M9 15l2 2 4-4"/></svg>',
+  embudo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5h16M7 10h10M10 15h4M11.5 20h1"/></svg>',
+  contactos:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8.5" r="3.5"/><path d="M3 19c.8-3.2 3.2-5 6-5s5.2 1.8 6 5"/><path d="M16 5.5a3.2 3.2 0 0 1 0 6M18 14.3c1.4.7 2.4 2.3 2.9 4.7"/></svg>',
+  obj:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M8.5 8h7M8.5 11.5h4.5"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  ajustes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>',
+  wa:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2a9.7 9.7 0 0 0-8.4 14.6L2.3 21.7l5-1.3A9.7 9.7 0 1 0 12 2.2Zm0 17.6a8 8 0 0 1-4.1-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1 1 12 19.8Zm4.4-6c-.2-.1-1.4-.7-1.7-.8-.2-.1-.4-.1-.5.1l-.8 1c-.1.2-.3.2-.5.1a6.5 6.5 0 0 1-3.2-2.8c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5a.9.9 0 0 0-.7.3 2.8 2.8 0 0 0-.9 2.1 4.9 4.9 0 0 0 1 2.6 11.2 11.2 0 0 0 4.3 3.8c1.6.7 2.2.7 3 .6.5-.1 1.4-.6 1.6-1.1.2-.6.2-1 .1-1.1l-.6-.3Z"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-8 9"/></svg>',
+  pen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>',
+  back:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m14 6-6 6 6 6"/></svg>'
+};
+
+/* ============ Países de América y Europa ============ */
+const COUNTRIES = [
+ ['AR','Argentina','54','ARS'],['BS','Bahamas','1','BSD'],['BB','Barbados','1','BBD'],['BZ','Belice','501','BZD'],['BO','Bolivia','591','BOB'],['BR','Brasil','55','BRL'],['CA','Canadá','1','CAD'],['CL','Chile','56','CLP'],['CO','Colombia','57','COP'],['CR','Costa Rica','506','CRC'],['CU','Cuba','53','CUP'],['DM','Dominica','1','XCD'],['EC','Ecuador','593','USD'],['SV','El Salvador','503','USD'],['US','Estados Unidos','1','USD'],['GD','Granada','1','XCD'],['GT','Guatemala','502','GTQ'],['GY','Guyana','592','GYD'],['HT','Haití','509','HTG'],['HN','Honduras','504','HNL'],['JM','Jamaica','1','JMD'],['MX','México','52','MXN'],['NI','Nicaragua','505','NIO'],['PA','Panamá','507','USD'],['PY','Paraguay','595','PYG'],['PE','Perú','51','PEN'],['PR','Puerto Rico','1','USD'],['DO','República Dominicana','1','DOP'],['KN','San Cristóbal y Nieves','1','XCD'],['VC','San Vicente y las Granadinas','1','XCD'],['LC','Santa Lucía','1','XCD'],['SR','Surinam','597','SRD'],['TT','Trinidad y Tobago','1','TTD'],['UY','Uruguay','598','UYU'],['VE','Venezuela','58','USD'],['AG','Antigua y Barbuda','1','XCD'],
+ ['AL','Albania','355','ALL'],['DE','Alemania','49','EUR'],['AD','Andorra','376','EUR'],['AT','Austria','43','EUR'],['BE','Bélgica','32','EUR'],['BY','Bielorrusia','375','BYN'],['BA','Bosnia y Herzegovina','387','BAM'],['BG','Bulgaria','359','EUR'],['CY','Chipre','357','EUR'],['VA','Ciudad del Vaticano','39','EUR'],['HR','Croacia','385','EUR'],['DK','Dinamarca','45','DKK'],['SK','Eslovaquia','421','EUR'],['SI','Eslovenia','386','EUR'],['ES','España','34','EUR'],['EE','Estonia','372','EUR'],['FI','Finlandia','358','EUR'],['FR','Francia','33','EUR'],['GR','Grecia','30','EUR'],['HU','Hungría','36','HUF'],['IE','Irlanda','353','EUR'],['IS','Islandia','354','ISK'],['IT','Italia','39','EUR'],['XK','Kosovo','383','EUR'],['LV','Letonia','371','EUR'],['LI','Liechtenstein','423','CHF'],['LT','Lituania','370','EUR'],['LU','Luxemburgo','352','EUR'],['MK','Macedonia del Norte','389','MKD'],['MT','Malta','356','EUR'],['MD','Moldavia','373','MDL'],['MC','Mónaco','377','EUR'],['ME','Montenegro','382','EUR'],['NO','Noruega','47','NOK'],['NL','Países Bajos','31','EUR'],['PL','Polonia','48','PLN'],['PT','Portugal','351','EUR'],['GB','Reino Unido','44','GBP'],['CZ','República Checa','420','CZK'],['RO','Rumania','40','RON'],['RU','Rusia','7','RUB'],['SM','San Marino','378','EUR'],['RS','Serbia','381','RSD'],['SE','Suecia','46','SEK'],['CH','Suiza','41','CHF'],['UA','Ucrania','380','UAH']
+].sort((a,b)=>a[1].localeCompare(b[1],'es'));
+const flag = cc => cc.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0)));
+const country = code => COUNTRIES.find(c=>c[0]===code) || COUNTRIES.find(c=>c[0]==='CL');
+const DIALS = [...new Set(COUNTRIES.map(c=>c[2]))].sort((a,b)=>b.length-a.length);
+
+/* ============ Tipos de piel y test ============ */
+const SKIN = {
+  sensible:{n:'Piel sensible / reactiva',img:'img/rutina-sensible.jpg',d:'Se irrita con facilidad y necesita calma y una introducción gradual de productos.'},
+  acneica:{n:'Tendencia acneica',img:'img/rutina-acneica.jpg',d:'Brotes o sensación de congestión. El enfoque es no sobrecargar la piel.'},
+  manchas:{n:'Piel opaca / manchas',img:'img/rutina-manchas.jpg',d:'Tono apagado o manchas visibles. El enfoque es luminosidad y protección.'},
+  grasa:{n:'Piel grasa',img:'img/rutina-grasa.jpg',d:'Brillo frecuente y exceso de sebo. El enfoque es hidratación ligera.'},
+  mixta:{n:'Piel mixta',img:'img/rutina-mixta.jpg',d:'Zona T con brillo y algunas zonas resecas. El enfoque es el equilibrio.'},
+  normal:{n:'Piel normal',img:'img/rutina-normal.jpg',d:'Se siente equilibrada. El enfoque es mantenimiento e hidratación.'},
+  seca:{n:'Piel seca',img:'img/rutina-seca.jpg',d:'Tirantez y resequedad visible. El enfoque es nutrición y humectación.'}
+};
+const QUIZ = [
+  {q:'¿Cómo sientes tu piel unas horas después de lavarla?',o:[['Tirante o áspera',{seca:2}],['Cómoda, sin cambios',{normal:2}],['Con brillo en frente, nariz y mentón',{mixta:2}],['Con brillo en todo el rostro',{grasa:2}]]},
+  {q:'¿Cómo se ven tus poros?',o:[['Casi invisibles',{seca:1,normal:1}],['Visibles solo en la zona T',{mixta:2}],['Dilatados en todo el rostro',{grasa:2}]]},
+  {q:'¿Con qué frecuencia te salen granitos?',o:[['Casi nunca',{}],['A veces, con estrés o en ciertos días del mes',{acne:1}],['Seguido, y siento la piel congestionada',{acne:3}]]},
+  {q:'¿Cómo reacciona tu piel a productos nuevos, al sol o al frío?',o:[['Sin problema',{}],['A veces se enrojece',{sens:1}],['Se irrita o arde con facilidad',{sens:3}]]},
+  {q:'¿Tienes manchas o sientes tu tono apagado?',o:[['No',{}],['Un poco',{manchas:1}],['Sí, es lo que más me preocupa',{manchas:3}]]},
+  {q:'¿Sientes zonas resecas o con descamación?',o:[['Nunca',{grasa:1,normal:1}],['En algunas zonas, como las mejillas',{mixta:1,seca:1}],['Sí, seguido',{seca:2}]]},
+  {q:'¿Qué te gustaría mejorar primero?',o:[['Controlar el brillo',{grasa:1,mixta:1}],['Hidratar mi piel',{seca:1}],['Calmar la irritación',{sens:2}],['Controlar los granitos',{acne:2}],['Manchas y luminosidad',{manchas:2}],['Mantener mi piel sana',{normal:2}]]}
+];
+function scoreQuiz(ans){
+  const s={seca:0,normal:0,mixta:0,grasa:0,sens:0,acne:0,manchas:0};
+  ans.forEach((a,i)=>{ const pts=QUIZ[i].o[a][1]; for(const k in pts) s[k]+=pts[k]; });
+  if(s.sens>=3) return 'sensible';
+  if(s.acne>=3) return 'acneica';
+  if(s.manchas>=3) return 'manchas';
+  return ['mixta','normal','seca','grasa'].reduce((b,k)=>s[k]>s[b]?k:b,'mixta');
+}
+
+/* ============ Objeciones ============ */
+const OBJ = [
+  {k:'caro',n:'Es muy caro',r:'Te entiendo, es una inversión. Déjame preguntarte algo: en tu piel, ¿prefieres lo más barato o lo mejor? … Exacto. Y lo barato casi nunca es lo mejor; muchas veces terminas comprando tres productos que no funcionan. Además, esta rutina te dura 5 meses: si lo divides por día, es muy poco por la piel que quieres.'},
+  {k:'dinero',n:'No tengo dinero ahora',r:'Lo entiendo perfecto. Si el dinero no fuera tema, ¿es algo que te gustaría tener? … Entonces veamos cómo hacerlo posible: podemos partir con lo esencial para tu tipo de piel y sumar el resto después.'},
+  {k:'tiempo',n:'No tengo tiempo',r:'Justamente por eso te lo muestro. Esto no te pide más tiempo, te pide usar mejor el que ya tienes. ¿Cuánto tiempo al día le dedicas hoy al celular? Con una o dos horas bien enfocadas se puede partir.'},
+  {k:'pareja',n:'Tengo que conversarlo con mi pareja',r:'¡Me parece súper bien! Las buenas decisiones se toman en conjunto. ¿Qué crees tú que te va a preguntar? … ¿Te parece si agendamos 10 minutos con los dos y le resuelvo todas sus dudas directamente?'},
+  {k:'finmes',n:'A fin de mes',r:'Perfecto, lo dejamos agendado. ¿Qué día te pagan? … Te escribo ese día y te dejo todo listo para que sea solo confirmar.'},
+  {k:'piramide',n:'No confío en estos negocios',r:'Qué bueno que lo preguntes, yo pensaba lo mismo. La diferencia es que aquí hay un producto real que la gente compra y vuelve a comprar. ¿Te parece si te conecto con alguien que ya está ganando y te muestra sus comisiones?'},
+  {k:'marca',n:'Ya uso otra marca',r:'¡Qué bueno que ya cuidas tu piel! ¿Y estás 100% feliz con los resultados? … Te propongo comparar: prueba tu rutina RIMAN y tú misma decides.'}
+];
+const objByKey = k => OBJ.find(o=>o.k===k);
+
+/* ============ Secuencias ============ */
+const DEFAULT_LINKS = {
+  kiyosaki:'https://www.youtube.com/watch?v=OGdpckef9-E',
+  lesbrown:'https://www.youtube.com/watch?v=eiBGOhJUo74',
+  pelicula:'https://www.youtube.com/watch?v=iCcxEhSM10U',
+  academia:'https://kwamacademy.com'
+};
+const RECONNECT = 'Hola {n} 😊 ¿Pudiste ver lo que te envié? Quedo atento a lo que te pareció.';
+const SEQ = {
+  cliente:[
+    {t:'Testimonio real de clientes',kind:'send',
+     instr:'Entra a la Academia K-WAM y busca los testimonios de la línea ICD. Si necesitas más, revisa el canal de testimonios. Adjunta el testimonio en el chat junto a este mensaje.',
+     msg:'Hola {n} 😊 Te comparto el testimonio de una clienta que usa la línea ICD de RIMAN. ¡Mira sus resultados y me cuentas qué te parece!'},
+    {t:'Película de RIMAN',kind:'send',msg:'Hola {n}, te comparto la película de RIMAN. Son unos minutos y vas a entender por qué es una marca tan exclusiva en Corea: {pelicula}'},
+    {t:'Test de piel',kind:'test',msg:'Hola {n}, para recomendarte la rutina ideal preparé un test corto sobre tu piel. Son 7 preguntas y te toma un minuto: {test}'},
+    {t:'Recomendación de rutina',kind:'reco',msg:'Hola {n}, según tu test, esta es la rutina que te recomiendo para tu piel ({piel}). Si te interesa, te muestro cómo usarla y qué resultados puedes esperar. ¿Me das 10 minutos por Zoom?'},
+    {t:'Zoom de 10 minutos',kind:'zoom',cierre:true,msg:'¡Listo, {n}! Nos vemos el {fecha} a las {hora} por Zoom. Te muestro tu rutina, cómo usarla y los resultados que puedes esperar. {zoom}'},
+    {t:'Objeción real',kind:'obj',msg:''},
+    {t:'Reunión de 3 vías con un líder',kind:'live',msg:'Hola {n}, ¿te parece si hacemos una videollamada corta con una líder de mi equipo para resolver tus dudas? Te propongo el {fecha} a las {hora}. {zoom}'}
+  ],
+  planner:[
+    {t:'Video Kiyosaki: mente rica vs mente pobre',kind:'send',msg:'Hola {n}, te comparto este video que me cambió la forma de ver el dinero. Míralo con calma y me cuentas qué te pareció: {kiyosaki}'},
+    {t:'Testimonio de comisiones',kind:'send',
+     instr:'Conversa con tu team leader y pídele una captura de sus comisiones para compartirla con tu prospecto.',
+     msg:'Hola {n}, te comparto un resultado real de una persona de nuestro equipo. Esto es lo que se logra con constancia 💪'},
+    {t:'Llamada de 3 vías con un líder de apoyo',kind:'live',msg:'Hola {n}, me gustaría que conversaras con un líder que me apoya. ¿Te acomoda una llamada corta el {fecha} a las {hora}? {zoom}'},
+    {t:'Conectar a otra presentación',kind:'live',msg:'Hola {n}, tenemos otra presentación el {fecha} a las {hora}. Me encantaría que te conectaras para que veas más detalles: {zoom}'},
+    {t:'Masterclass de finanzas K-WAM',kind:'send',msg:'Hola {n}, te invito a ver la masterclass de finanzas de K-WAM. Así entras:\n1. Abre {academia}\n2. Toca "Academia K-WAM"\n3. Elige la primera opción: "Invitado"\n4. Toca "Ver Masterclass"\n¡Me cuentas qué te pareció!'},
+    {t:'Video Les Brown: sigue tus sueños',kind:'send',msg:'Hola {n}, este video es para ti. Un recordatorio de por qué vale la pena ir por lo que soñamos: {lesbrown}'},
+    {t:'Zoom de 3 vías para cierre',kind:'live',cierre:true,msg:'Hola {n}, te propongo una reunión por Zoom con un líder del equipo para resolver todo y que des el siguiente paso. Nos vemos el {fecha} a las {hora}. {zoom}'}
+  ]
+};
+const CIERRE = {cliente:5, planner:7};
+const step = c => SEQ[c.tipo][c.paso-1];
+const isLive = st => st.kind==='live' || st.kind==='zoom';
+const ANCLA_TIPS = ['Tiene manchas que le acomplejan','Se casa en marzo','Quiere dejar su trabajo','Viaja en diciembre','Su hija tiene acné','Busca un ingreso extra','Le encantó la textura del gel','Duerme poco por los niños'];
+
+/* ============ Estado ============ */
+let S = {
+  user: store.get('user', null),
+  links: store.get('links', DEFAULT_LINKS),
+  contacts: store.get('contacts', null),
+  view:'hoy', sel:null, tipoTab:'cliente', fStep:null, filter:'todos', q:'', open:{},
+  testFor:null
+};
+function save(){ store.set('user',S.user); store.set('links',S.links); store.set('contacts',S.contacts); }
+
+function seed(){
+  const N=[['Camila Rojas','cliente',1,35,'Tiene manchas que le acomplejan'],['Valentina Soto','cliente',1,20,''],['Javiera Muñoz','cliente',2,55,'Se casa en marzo, quiere verse radiante'],['Fernanda Díaz','cliente',2,40,'Le encantó la textura del gel'],['Paula Herrera','cliente',2,30,''],['Catalina Pérez','cliente',3,62,'Su hija tiene acné'],['Andrea Castro','cliente',3,48,''],['Daniela Vargas','cliente',4,84,'Viaja a Europa en diciembre'],['Constanza Reyes','cliente',4,58,''],['Macarena Torres','cliente',5,90,'Quiere una rutina simple, trabaja de noche'],['Francisca Silva','cliente',6,66,'Dijo que lo conversaría con su esposo'],['Carolina Flores','cliente',7,72,''],
+    ['Rodrigo Pinto','planner',1,45,'Quiere dejar su trabajo en el banco'],['Ignacio Morales','planner',1,25,''],['Sebastián Araya','planner',2,60,'Busca un ingreso extra para su familia'],['Matías Contreras','planner',3,82,'Ya tuvo un negocio antes, es muy emprendedor'],['Tomás Gutiérrez','planner',4,50,''],['Felipe Navarro','planner',5,38,'Le preocupa el tiempo, tiene dos trabajos'],['Nicolás Fuentes','planner',6,70,''],['Diego Espinoza','planner',7,88,'Quiere viajar con su familia']];
+  const arr = N.map((r,i)=>{
+    const c={id:uid(),nombre:r[0],tel:'+569'+String(50000000+i*1373917%49999999).slice(0,8),tipo:r[1],paso:r[2],temp:r[3],ancla:r[4],estado:'activo',piel:null,obj:null,objFrase:'',sent:null,espera:null,desde:null,agenda:null,ej:true,hist:[{f:addDays(TODAY,-(r[2]*2+1)),t:'Contacto agregado'}]};
+    if(c.tipo==='cliente'&&c.paso>=4) c.piel=['mixta','grasa','manchas','seca','acneica','normal','sensible'][i%7];
+    return c;
+  });
+  // estados variados para que "Hoy" muestre de todo
+  arr[1].sent=addDays(TODAY,-1);
+  arr[3].sent=addDays(TODAY,-1);
+  arr[4].sent=addDays(TODAY,-3); arr[4].espera=TODAY;
+  arr[6].sent=addDays(TODAY,-1);
+  arr[9].agenda={fecha:TODAY,hora:'19:30',zoom:''};  arr[9].sent=addDays(TODAY,-1);
+  arr[10].obj='pareja'; arr[10].objFrase='Lo tengo que conversar con mi marido';
+  arr[13].sent=addDays(TODAY,-1);
+  arr[15].agenda={fecha:addDays(TODAY,1),hora:'20:00',zoom:''}; arr[15].sent=TODAY;
+  arr[16].agenda={fecha:addDays(TODAY,-1),hora:'21:00',zoom:''}; arr[16].sent=addDays(TODAY,-2);
+  arr[19].agenda={fecha:TODAY,hora:'21:00',zoom:''}; arr[19].sent=addDays(TODAY,-1);
+  arr.push({id:uid(),nombre:'Antonia Lagos',tel:'+56987770011',tipo:'cliente',paso:5,temp:95,ancla:'',estado:'cerrado',piel:'mixta',obj:null,objFrase:'',sent:null,espera:null,desde:null,agenda:null,ej:true,hist:[]});
+  arr.push({id:uid(),nombre:'Bárbara Ortiz',tel:'+56987770012',tipo:'cliente',paso:3,temp:10,ancla:'',estado:'pausa',piel:null,obj:'caro',objFrase:'',sent:null,espera:null,desde:null,agenda:null,ej:true,hist:[]});
+  return arr;
+}
+if(!S.contacts) S.contacts = seed();
+
+/* ============ Lógica de seguimiento ============ */
+const tempColor = t => t>=70 ? 'var(--hot)' : t>=40 ? 'var(--warm)' : 'var(--cold)';
+const tempLabel = t => t>=80 ? 'Muy caliente' : t>=60 ? 'Caliente' : t>=40 ? 'Tibio' : 'Frío';
+const byId = id => S.contacts.find(c=>c.id===id);
+function log(c,t){ c.hist=c.hist||[]; c.hist.unshift({f:TODAY,t}); }
+
+function status(c){
+  if(c.estado!=='activo') return {k:'none'};
+  if(c.desde && c.desde>TODAY) return {k:'later'};
+  const st=step(c);
+  if(isLive(st) && c.agenda){
+    if(c.agenda.fecha===TODAY) return {k:'meet'};
+    if(c.agenda.fecha<TODAY) return {k:'held'};
+    return {k:'upcoming'};
+  }
+  if(c.sent){
+    if(c.sent>=TODAY) return {k:'waiting'};
+    if(c.espera){ return c.espera<=TODAY ? {k:'reconnect'} : {k:'later'}; }
+    return {k:'ask'};
+  }
+  return {k:'todo'};
+}
+function hot(c){ return c.estado==='activo' && c.temp>=80 && c.paso<CIERRE[c.tipo]; }
+
+function advance(c){
+  if(c.paso>=7){ c.estado='cerrado'; log(c,'Marcado como cerrado'); toast(c.nombre.split(' ')[0]+' terminó la secuencia'); }
+  else { c.paso++; log(c,'Avanzó al paso '+c.paso); }
+  c.sent=null; c.espera=null; c.agenda=null; c.desde=null;
+}
+function fill(tpl,c,extra={}){
+  const ag=c.agenda||{};
+  const testLink = location.href.split('#')[0].split('?')[0]+'?test='+c.id+'&n='+encodeURIComponent(c.nombre.split(' ')[0]);
+  return tpl.replace(/\{(\w+)\}/g,(m,k)=>{
+    if(k==='n') return c.nombre.split(' ')[0];
+    if(k==='piel') return c.piel?SKIN[c.piel].n.toLowerCase():'tu tipo de piel';
+    if(k==='fecha') return ag.fecha?fmtDate(ag.fecha):'[día]';
+    if(k==='hora') return ag.hora||'[hora]';
+    if(k==='zoom') return ag.zoom?('Link: '+ag.zoom):'';
+    if(k==='test') return testLink;
+    if(k in S.links) return S.links[k];
+    return extra[k]??m;
+  }).trim();
+}
+function waHref(c,text){
+  const digits=(c.tel||'').replace(/\D/g,'');
+  return 'https://wa.me/'+(digits||'')+'?text='+encodeURIComponent(text);
+}
+
+/* ============ Render ============ */
+function render(){
+  if(S.testOnly||(S.user&&S.testFor)) return renderTest();
+  if(!S.user) return renderAuth();
+  const views={hoy:['Hoy',IC.hoy],embudo:['Embudo',IC.embudo],contactos:['Contactos',IC.contactos],objeciones:['Objeciones',IC.obj]};
+  const navBtn=(k,cls)=>`<button class="${cls}${S.view===k?' on':''}" data-act="nav" data-v="${k}">${views[k][1]}<span>${views[k][0]}</span></button>`;
+  const demo = S.contacts.some(c=>c.ej) ? '<span class="demo-badge">Datos de ejemplo</span>' : '';
+  $('#app').innerHTML = `<div class="shell">
+    <aside class="side">
+      <div class="logos" style="flex-direction:column;align-items:flex-start;gap:10px"><span class="logo riman"></span><span class="logo kwam"></span></div>
+      <button class="btn" data-act="new">${IC.plus}Nuevo contacto</button>
+      <nav>${Object.keys(views).map(k=>navBtn(k,'nav')).join('')}
+        <button class="nav${S.view==='ajustes'?' on':''}" data-act="nav" data-v="ajustes">${IC.ajustes}<span>Ajustes</span></button></nav>
+      <div class="who">${esc(S.user.nombre)} ${esc(S.user.apellido||'')}<br>${flag(S.user.pais)} ${esc(country(S.user.pais)[1])}</div>
+    </aside>
+    <div class="main">
+      <header class="top"><div class="logos"><span class="logo riman"></span><span class="sep"></span><span class="logo kwam"></span></div>
+        <div class="row" style="gap:8px">${demo}<button class="chip" data-act="nav" data-v="ajustes" aria-label="Ajustes" style="padding:6px 8px;display:grid">${IC.ajustes.replace('<svg','<svg width="18" height="18"')}</button></div></header>
+      <main class="content" id="content">${renderView()}</main>
+    </div>
+    <nav class="tabbar">${navBtn('hoy','tab')}${navBtn('embudo','tab')}<button class="tab plus" data-act="new"><span class="fab">${IC.plus}</span><span>Agregar</span></button>${navBtn('contactos','tab')}${navBtn('objeciones','tab')}</nav>
+  </div>`;
+}
+function renderView(){
+  switch(S.view){
+    case 'hoy': return viewHoy();
+    case 'embudo': return viewEmbudo();
+    case 'contactos': return viewContactos();
+    case 'ficha': return viewFichaPage();
+    case 'objeciones': return viewObjeciones();
+    case 'ajustes': return viewAjustes();
+  }
+  return '';
+}
+function contactRow(c,extra=''){
+  const st=step(c);
+  const tipo = c.tipo==='cliente'?'Cliente':'Planner';
+  const estado = c.estado==='cerrado'?' · Cerrado ✓':c.estado==='pausa'?' · En pausa':'';
+  return `<button class="item${S.sel===c.id?' sel':''}" data-act="open" data-id="${c.id}">
+    <span class="av">${esc(initials(c.nombre))}</span>
+    <span class="grow"><span class="name">${esc(c.nombre)}</span><span class="meta">${tipo} · Paso ${c.paso}: ${esc(st.t)}${estado}</span></span>
+    ${extra}<span class="tdot" style="background:${tempColor(c.temp)}" title="${c.temp}%"></span></button>`;
+}
+
+/* ---- Hoy ---- */
+function viewHoy(){
+  const act=S.contacts.filter(c=>c.estado==='activo');
+  const groups={}, asks=[], recon=[], meets=[], held=[], upcoming=[];
+  act.forEach(c=>{
+    const s=status(c).k;
+    if(s==='todo'){ const st=step(c); const key=c.tipo+'|'+c.paso; (groups[key]=groups[key]||{c:c.tipo,p:c.paso,st,list:[]}).list.push(c); }
+    else if(s==='ask') asks.push(c);
+    else if(s==='reconnect') recon.push(c);
+    else if(s==='meet') meets.push(c);
+    else if(s==='held') held.push(c);
+    else if(s==='upcoming') upcoming.push(c);
+  });
+  const hots=act.filter(hot);
+  const gl=Object.values(groups).sort((a,b)=>a.c.localeCompare(b.c)||a.p-b.p);
+  const total=gl.reduce((n,g)=>n+g.list.length,0)+asks.length+recon.length+meets.length+held.length;
+  const verb = st => st.kind==='test'?'Enviar test de piel':isLive(st)?'Agendar: '+st.t:st.kind==='obj'?'Identificar objeción':st.kind==='reco'?'Enviar recomendación':'Enviar: '+st.t;
+  const taskBlock=(id,cnt,cls,title,sub,body)=>{
+    const open=S.open[id]; return `<div class="task"><button class="th" data-act="toggle" data-id="${id}" aria-expanded="${!!open}"><span class="cnt ${cls}">${cnt}</span><span class="tt"><b>${esc(title)}</b><span>${esc(sub)}</span></span><span class="muted" aria-hidden="true">${open?'▴':'▾'}</span></button>${open?`<div class="tb">${body}</div>`:''}</div>`;
+  };
+  let h=`<section class="hello"><div class="eyebrow">${new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'})}</div>
+    <h1 class="display">Hola, ${esc(S.user.nombre)}</h1>
+    <p class="muted" style="margin:4px 0 0">${total?`Hoy tienes <b class="num" style="color:var(--ink)">${total}</b> ${total===1?'acción':'acciones'} de seguimiento.`:'Estás al día. Agrega nuevos prospectos después de tus demostraciones.'}</p></section>`;
+  if(hots.length) h+=`<div class="alert"><span style="font-size:20px" aria-hidden="true">🔥</span><div><b>${hots.length} ${hots.length===1?'prospecto caliente':'prospectos calientes'}</b> (80% o más). Podrías llevarlos directo al cierre.<div class="chips" style="margin-top:8px">${hots.map(c=>`<button class="chip" data-act="open" data-id="${c.id}">${esc(c.nombre.split(' ')[0])} · ${c.temp}%</button>`).join('')}</div></div></div>`;
+  if(meets.length) h+=taskBlock('meet',meets.length,'','Reuniones de hoy','Revisa la ficha antes de conectarte',meets.map(c=>contactRow(c,`<span class="pill">${esc(c.agenda.hora)}</span>`)).join(''));
+  if(asks.length) h+=taskBlock('ask',asks.length,'q','¿Te respondieron?','Un toque por persona para saber qué sigue',asks.map(c=>`<div class="ask"><div class="row" style="justify-content:space-between"><b>${esc(c.nombre)}</b><span class="muted small">Paso ${c.paso} · enviado ${fmtDate(c.sent)}</span></div><div class="row"><button class="btn sm" data-act="resp" data-r="si" data-id="${c.id}">Sí respondió</button><button class="btn sm soft" data-act="resp" data-r="aun" data-id="${c.id}">Aún no</button><button class="btn sm ghost" data-act="resp" data-r="no" data-id="${c.id}">No le interesa</button></div></div>`).join(''));
+  if(held.length) h+=taskBlock('held',held.length,'q','¿Se realizó la reunión?','Confírmalo para avanzar',held.map(c=>`<div class="ask"><div class="row" style="justify-content:space-between"><b>${esc(c.nombre)}</b><span class="muted small">${esc(step(c).t)} · ${fmtDate(c.agenda.fecha)}</span></div><div class="row"><button class="btn sm" data-act="held" data-r="si" data-id="${c.id}">Sí, avanzar</button><button class="btn sm soft" data-act="held" data-r="re" data-id="${c.id}">Reagendar</button></div></div>`).join(''));
+  if(recon.length) h+=taskBlock('recon',recon.length,'r','Reconectar','No respondieron hace 2 días: un mensaje suave',recon.map(c=>contactRow(c)).join(''));
+  gl.forEach(g=>{ const id='g'+g.c+g.p; h+=taskBlock(id,g.list.length,'',verb(g.st),(g.c==='cliente'?'Clientes':'Planners')+' · paso '+g.p+(g.st.cierre?' · cierre':''),g.list.map(c=>contactRow(c)).join('')); });
+  if(upcoming.length) h+=`<section class="card tint"><div class="sec-h"><h2>Próximas reuniones</h2></div>${upcoming.sort((a,b)=>a.agenda.fecha.localeCompare(b.agenda.fecha)).map(c=>`<div class="row" style="justify-content:space-between"><span>${esc(c.nombre)} <span class="muted small">· ${esc(step(c).t)}</span></span><span class="pill num">${fmtDate(c.agenda.fecha)} ${esc(c.agenda.hora)}</span></div>`).join('')}</section>`;
+  return h;
+}
+
+/* ---- Embudo ---- */
+function viewEmbudo(){
+  const t=S.tipoTab, list=S.contacts.filter(c=>c.tipo===t);
+  const act=list.filter(c=>c.estado==='activo');
+  const counts=SEQ[t].map((_,i)=>act.filter(c=>c.paso===i+1).length);
+  const max=Math.max(1,...counts);
+  let h=`<div class="sec-h"><h1 class="display" style="font-size:26px">Embudo</h1></div>
+  <div class="seg" role="tablist"><button class="${t==='cliente'?'on':''}" data-act="tipo" data-v="cliente">Clientes</button><button class="${t==='planner'?'on':''}" data-act="tipo" data-v="planner">Planners</button></div>
+  <div class="stats"><div class="stat"><b class="num">${act.length}</b><span>En seguimiento</span></div><div class="stat"><b class="num" style="color:var(--hot)">${act.filter(c=>c.temp>=80).length}</b><span>Calientes</span></div><div class="stat"><b class="num" style="color:var(--ok)">${list.filter(c=>c.estado==='cerrado').length}</b><span>Cerrados</span></div></div>
+  <div class="funnel">${SEQ[t].map((st,i)=>`<button class="fr${S.fStep===i+1?' on':''}" data-act="fstep" data-v="${i+1}"><span class="n num">${i+1}</span><span class="bw"><span class="bl">${esc(st.t)}${st.cierre?' <span class="pill cierre" style="margin-left:4px">Cierre</span>':''}</span><span class="bar"><i style="width:${counts[i]/max*100}%;${st.cierre?'background:var(--green)':''}"></i></span></span><span class="c num">${counts[i]}</span></button>`).join('')}</div>
+  <p class="muted small" style="margin:0">En pausa: ${list.filter(c=>c.estado==='pausa').length}. Toca un paso para ver a quiénes empujar al siguiente.</p>`;
+  if(S.fStep){
+    const sel=act.filter(c=>c.paso===S.fStep).sort((a,b)=>b.temp-a.temp);
+    h+=`<section style="display:flex;flex-direction:column;gap:10px"><div class="sec-h"><h2>Paso ${S.fStep}: ${esc(SEQ[t][S.fStep-1].t)}</h2></div>${sel.length?`<div class="list">${sel.map(c=>`<div class="item"><span class="av">${esc(initials(c.nombre))}</span><button class="grow" style="border:0;background:none;text-align:left;padding:0" data-act="open" data-id="${c.id}"><span class="name">${esc(c.nombre)}</span><span class="meta">${c.temp}% · ${tempLabel(c.temp)}</span></button><button class="btn sm" data-act="adv" data-id="${c.id}">Avanzar →</button></div>`).join('')}</div>`:'<div class="empty">Nadie en este paso.</div>'}</section>`;
+  }
+  return h;
+}
+
+/* ---- Contactos + ficha ---- */
+function filtered(){
+  const q=S.q.trim().toLowerCase();
+  return S.contacts.filter(c=>{
+    if(q && !(c.nombre.toLowerCase().includes(q)||(c.tel||'').includes(q))) return false;
+    if(S.filter==='cliente'||S.filter==='planner') return c.tipo===S.filter && c.estado==='activo';
+    if(S.filter==='calientes') return c.estado==='activo'&&c.temp>=80;
+    if(S.filter==='cerrados') return c.estado==='cerrado';
+    if(S.filter==='pausa') return c.estado==='pausa';
+    return c.estado==='activo';
+  }).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+}
+function viewContactos(){
+  const f=[['todos','Activos'],['cliente','Clientes'],['planner','Planners'],['calientes','Calientes'],['cerrados','Cerrados'],['pausa','En pausa']];
+  const L=filtered();
+  const left=`<div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+    <h1 class="display" style="font-size:26px">Contactos</h1>
+    <input class="in" id="search" type="search" placeholder="Buscar por nombre o teléfono" value="${esc(S.q)}">
+    <div class="chips">${f.map(x=>`<button class="chip${S.filter===x[0]?' on':''}" data-act="filter" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+    <div class="list" id="clist">${L.length?L.map(c=>contactRow(c)).join(''):'<div class="empty">No hay contactos con este filtro.</div>'}</div></div>`;
+  const wide=matchMedia('(min-width:900px)').matches;
+  if(wide){
+    const c=S.sel&&byId(S.sel);
+    return `<div class="split">${left}<div class="detail-pane">${c?ficha(c):'<div class="card tint"><div class="empty">Elige un contacto para ver su seguimiento.</div></div>'}</div></div>`;
+  }
+  return left;
+}
+function viewFichaPage(){
+  const c=byId(S.sel); if(!c){ S.view='contactos'; return viewContactos(); }
+  return `<button class="back" data-act="nav" data-v="${S.prev||'contactos'}">${IC.back}Volver</button>${ficha(c)}`;
+}
+function ficha(c){
+  const st=step(c), s=status(c).k;
+  const tipo=c.tipo==='cliente'?'Cliente':'Planner';
+  let h=`<div style="display:flex;flex-direction:column;gap:16px">
+  <div class="ficha-h"><span class="av">${esc(initials(c.nombre))}</span><div style="min-width:0;flex:1"><h2>${esc(c.nombre)}</h2>
+    <div class="row" style="gap:6px;margin-top:4px"><span class="pill ${c.tipo==='planner'?'plan':''}">${tipo}</span>${c.piel?`<span class="pill">${esc(SKIN[c.piel].n)}</span>`:''}${c.estado==='cerrado'?'<span class="pill cierre">Cerrado ✓</span>':c.estado==='pausa'?'<span class="pill">En pausa</span>':''}${hot(c)?'<span class="pill hot">🔥 Listo para cierre</span>':''}</div></div></div>
+  <div class="row" style="gap:8px"><span class="num" style="font-weight:600">${esc(c.tel||'Sin número')}</span>${c.tel?`<button class="chip" data-act="copy" data-t="${esc(c.tel)}">Copiar</button>`:''}<button class="chip" data-act="editc" data-id="${c.id}">Editar datos</button></div>
+  <div><div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="eyebrow">Paso ${c.paso} de 7</span><span class="muted small">${c.tipo==='cliente'?'Secuencia clientes':'Secuencia planners'}</span></div>
+    <div class="steps">${SEQ[c.tipo].map((x,i)=>`<i class="${i+1<c.paso||c.estado==='cerrado'?'d':i+1===c.paso?'c':''}"></i>`).join('')}</div></div>`;
+  if(c.estado==='activo') h+=stepCard(c,st,s);
+  else h+=`<div class="card tint"><b>${c.estado==='cerrado'?'Este prospecto ya cerró.':'Este prospecto está en pausa.'}</b><button class="btn ghost" data-act="estado" data-v="activo" data-id="${c.id}">Reactivar seguimiento</button></div>`;
+  if(hot(c)) h+=`<div class="alert"><span aria-hidden="true">🔥</span><div><b>${c.temp}% de cierre.</b> Puedes saltar directo al paso ${CIERRE[c.tipo]}: ${esc(SEQ[c.tipo][CIERRE[c.tipo]-1].t)}.<div style="margin-top:8px"><button class="btn sm" data-act="jump" data-id="${c.id}">Ir al cierre</button></div></div></div>`;
+  h+=`<section class="card"><div class="thermo"><div class="tv"><span class="eyebrow">Termómetro de cierre</span><span><b class="num" id="tval" style="color:${tempColor(c.temp)}">${c.temp}%</b> <span class="muted small" id="tlab">${tempLabel(c.temp)}</span></span></div>
+      <input type="range" min="0" max="100" step="5" value="${c.temp}" id="temp" aria-label="Termómetro de cierre de 0 a 100" data-id="${c.id}">
+      <div class="row muted small" style="justify-content:space-between"><span>❄️ Frío</span><span>Caliente 🔥</span></div></div></section>
+  <section class="card"><span class="eyebrow">Ancla de memoria</span><p class="muted small" style="margin:0">¿Qué dijo o qué lo hizo especial? Úsalo para personalizar cada mensaje.</p>
+    <textarea class="in" id="ancla" data-id="${c.id}" placeholder="Ej.: tiene manchas que le acomplejan, se casa en marzo…">${esc(c.ancla)}</textarea>
+    <div class="chips">${ANCLA_TIPS.map(t=>`<button class="chip" data-act="tip" data-id="${c.id}" data-t="${esc(t)}">+ ${esc(t)}</button>`).join('')}</div></section>
+  <section class="card"><span class="eyebrow">Objeción</span>
+    <div class="chips">${OBJ.map(o=>`<button class="chip${c.obj===o.k?' on':''}" data-act="obj" data-id="${c.id}" data-v="${o.k}">${esc(o.n)}</button>`).join('')}</div>
+    <input class="in" id="objf" data-id="${c.id}" placeholder="Frase literal que dijo (opcional)" value="${esc(c.objFrase)}">
+    ${c.obj?`<div class="eyebrow">Respuesta sugerida</div><div class="reply">${esc(objByKey(c.obj).r)}</div><button class="btn sm soft" data-act="copy" data-t="${esc(objByKey(c.obj).r)}">${IC.copy}Copiar respuesta</button>`:''}</section>
+  ${c.tipo==='cliente'?`<section class="card"><span class="eyebrow">Tipo de piel</span><p class="muted small" style="margin:0">Se completa solo cuando responde el test. También puedes elegirlo a mano.</p><div class="chips">${Object.entries(SKIN).map(([k,v])=>`<button class="chip${c.piel===k?' on':''}" data-act="piel" data-id="${c.id}" data-v="${k}">${esc(v.n)}</button>`).join('')}</div></section>`:''}
+  <section class="card tint"><span class="eyebrow">Acciones</span><div class="row">
+    ${c.paso>1&&c.estado==='activo'?`<button class="btn sm ghost" data-act="prev" data-id="${c.id}">← Paso anterior</button>`:''}
+    ${c.estado==='activo'?`<button class="btn sm" data-act="estado" data-v="cerrado" data-id="${c.id}">Marcar cerrado ✓</button><button class="btn sm soft" data-act="estado" data-v="pausa" data-id="${c.id}">Poner en pausa</button>`:''}
+    <button class="btn sm danger" data-act="del" data-id="${c.id}">Eliminar</button></div>
+    ${S.confirmDel===c.id?`<div class="err">¿Eliminar a ${esc(c.nombre)}? Esto no se puede deshacer.<div class="row" style="margin-top:8px"><button class="btn sm danger" data-act="delok" data-id="${c.id}">Sí, eliminar</button><button class="btn sm ghost" data-act="delno">Cancelar</button></div></div>`:''}</section>
+  ${c.hist&&c.hist.length?`<section class="hist"><span class="eyebrow">Historial</span>${c.hist.slice(0,8).map(x=>`<span>${fmtDate(x.f)} · ${esc(x.t)}</span>`).join('')}</section>`:''}
+  </div>`;
+  return h;
+}
+function stepCard(c,st,s){
+  const ancla = c.ancla?`<div class="anchor-note"><b>Recuerda:</b> ${esc(c.ancla)}</div>`:'';
+  let state='';
+  if(s==='later'&&c.desde) state=`<div class="okb">Siguiente acción disponible el ${fmtDate(c.desde)}.</div>`;
+  if(s==='waiting') state=`<div class="okb">Enviado hoy. Mañana te preguntaré si respondió.</div>`;
+  if(s==='ask') state=`<div class="warn"><b>¿${esc(c.nombre.split(' ')[0])} respondió?</b><div class="row" style="margin-top:8px"><button class="btn sm" data-act="resp" data-r="si" data-id="${c.id}">Sí</button><button class="btn sm soft" data-act="resp" data-r="aun" data-id="${c.id}">Aún no</button><button class="btn sm ghost" data-act="resp" data-r="no" data-id="${c.id}">No le interesa</button></div></div>`;
+  if(s==='later'&&c.espera) state=`<div class="okb">Esperando respuesta. Te recordaré reconectar el ${fmtDate(c.espera)}.</div>`;
+  if(s==='held') state=`<div class="warn"><b>¿Se realizó la reunión del ${fmtDate(c.agenda.fecha)}?</b><div class="row" style="margin-top:8px"><button class="btn sm" data-act="held" data-r="si" data-id="${c.id}">Sí, avanzar</button><button class="btn sm soft" data-act="held" data-r="re" data-id="${c.id}">Reagendar</button></div></div>`;
+  const reconnect = s==='reconnect';
+  const tpl = reconnect ? RECONNECT : st.msg;
+  const msgBox = tpl ? `<label class="f">Mensaje (puedes editarlo)<textarea class="in" id="msg" data-id="${c.id}">${esc(fill(tpl,c))}</textarea></label>
+     <div class="row"><a class="btn wa" id="wa" href="${esc(waHref(c,fill(tpl,c)))}" target="_blank" rel="noopener" data-act="sent" data-id="${c.id}" data-re="${reconnect?1:0}">${IC.wa}${reconnect?'Enviar reconexión':'Enviar por WhatsApp'}</a><button class="btn ghost" data-act="copymsg">${IC.copy}Copiar</button></div>` : '';
+  let body='';
+  if(st.instr) body+=`<div class="instr"><b>Qué hacer:</b> ${esc(st.instr)}${c.tipo==='cliente'&&c.paso===1?` <a href="${esc(S.links.academia)}" target="_blank" rel="noopener">Abrir Academia K-WAM</a>`:''}</div>`;
+  if(st.kind==='test') body+=`<div class="instr">El prospecto responde 7 preguntas desde su celular. Al terminar, su tipo de piel aparece aquí y queda listo el paso 4.</div><button class="btn soft" data-act="test" data-id="${c.id}">Ver el test como lo ve ${esc(c.nombre.split(' ')[0])}</button>`;
+  if(st.kind==='reco'){
+    if(!c.piel) body+=`<div class="warn">Aún no sabemos su tipo de piel. Pídele que responda el test, o elígelo abajo en "Tipo de piel".</div>`;
+    else body+=`<img class="rutina" src="${SKIN[c.piel].img}" alt="Rutina ICD para ${esc(SKIN[c.piel].n)}"><button class="btn soft" data-act="shareimg" data-id="${c.id}">Compartir imagen de la rutina</button>`;
+  }
+  if(isLive(st)) body+=agendaForm(c,st);
+  if(st.kind==='zoom') body+=zoomGuide(c);
+  if(st.kind==='obj') body+=`<div class="instr">Pregunta con calma qué le impide decidir. Marca la objeción en la sección <b>Objeción</b> de más abajo y usa la respuesta sugerida. Cuando la resuelvas, avanza al paso 7.</div><button class="btn" data-act="adv" data-id="${c.id}">Objeción trabajada → Paso 7</button>`;
+  return `<section class="stepcard"><div class="row" style="justify-content:space-between"><span class="eyebrow">Paso ${c.paso} · ${reconnect?'Reconectar':'Acción de hoy'}</span>${st.cierre?'<span class="pill cierre">Cierre</span>':''}</div>
+    <h3 class="display">${esc(st.t)}</h3>${state}${ancla}${body}${(isLive(st)&&!c.agenda)?'':msgBox}
+    ${s==='todo'&&!isLive(st)&&st.kind!=='obj'?`<button class="linkbtn small" style="align-self:flex-start" data-act="adv" data-id="${c.id}">Saltar al paso siguiente →</button>`:''}</section>`;
+}
+function agendaForm(c,st){
+  const a=c.agenda||{};
+  return `<div class="card tint" style="gap:10px"><span class="eyebrow">${c.agenda?'Reunión agendada':'Agenda la reunión'}</span>
+    <div class="row" style="gap:8px"><label class="f" style="flex:1 1 140px">Día<input class="in" type="date" id="ag_f" value="${esc(a.fecha||'')}"></label><label class="f" style="flex:1 1 110px">Hora<input class="in" type="time" id="ag_h" value="${esc(a.hora||'')}"></label></div>
+    <label class="f">Link de Zoom (opcional)<input class="in" id="ag_z" placeholder="https://zoom.us/j/…" value="${esc(a.zoom||'')}"></label>
+    <button class="btn ${c.agenda?'ghost':''}" data-act="agendar" data-id="${c.id}">${IC.cal}${c.agenda?'Actualizar reunión':'Guardar reunión'}</button></div>`;
+}
+function zoomGuide(c){
+  const cur=country(S.user.pais)[3];
+  return `<div class="instr"><b>Prepara la reunión</b><ol>
+    <li>Revisa la ficha: tipo de piel, ancla de memoria y termómetro.</li>
+    <li>Ten listos los antes y después de su tipo de piel (${c.piel?esc(SKIN[c.piel].n.toLowerCase()):'tipo de piel'}).</li>
+    <li>Explica cómo usar la rutina de mañana y de noche.</li>
+    <li>Comparte pantalla y arma el carrito en la página oficial de RIMAN.</li>
+    <li>Recuérdale que el producto dura 5 meses y muéstrale el costo mensual y diario.</li>
+    <li>Intenta el cierre.</li></ol></div>
+  <div class="card" style="gap:10px"><span class="eyebrow">Calculadora de cierre</span>
+    <label class="f">Total del carrito (${esc(cur)})<input class="in num" id="calc" inputmode="decimal" placeholder="Ej.: 450000"></label>
+    <div class="calc" id="calcout">${calcHTML(0)}</div>
+    <div class="reply" id="calcline" hidden></div></div>`;
+}
+function money(v){
+  const cur=country(S.user.pais)[3];
+  try{ return new Intl.NumberFormat('es',{style:'currency',currency:cur,maximumFractionDigits:v<100?2:0}).format(v); }catch(e){ return cur+' '+Math.round(v); }
+}
+function calcHTML(t){ return `<div><b class="num">${t?money(t):'—'}</b><span>Total · 5 meses</span></div><div><b class="num">${t?money(t/5):'—'}</b><span>Al mes</span></div><div><b class="num">${t?money(t/150):'—'}</b><span>Al día</span></div>`; }
+
+/* ---- Objeciones ---- */
+function viewObjeciones(){
+  return `<h1 class="display" style="font-size:26px">Objeciones</h1>
+  <p class="muted" style="margin:0">Valida, pregunta y reencuadra. Nunca discutas.</p>
+  ${OBJ.map(o=>`<section class="card"><h2 style="font-size:17px">“${esc(o.n)}”</h2><div class="reply">${esc(o.r)}</div><button class="btn sm soft" style="align-self:flex-start" data-act="copy" data-t="${esc(o.r)}">${IC.copy}Copiar respuesta</button></section>`).join('')}`;
+}
+
+/* ---- Ajustes / administrador ---- */
+function viewAjustes(){
+  const u=S.user;
+  return `<h1 class="display" style="font-size:26px">Ajustes</h1>
+  <section class="card"><span class="eyebrow">Mi cuenta</span>
+    <div class="row" style="gap:8px"><label class="f" style="flex:1 1 160px">Nombre<input class="in" id="u_n" value="${esc(u.nombre)}"></label><label class="f" style="flex:1 1 160px">Apellido<input class="in" id="u_a" value="${esc(u.apellido||'')}"></label></div>
+    <label class="f">País<select class="in" id="u_p">${countryOptions(u.pais)}</select></label>
+    <button class="btn" data-act="saveuser">Guardar</button></section>
+  <section class="card"><span class="eyebrow">Panel de administrador</span><p class="muted small" style="margin:0">En la versión final solo tú verás esta sección. Lo que cambies aquí le llega a todo el equipo.</p>
+    ${[['kiyosaki','Planner · paso 1 · Video Kiyosaki'],['pelicula','Clientes · paso 2 · Película de RIMAN'],['academia','Academia K-WAM (testimonios y masterclass)'],['lesbrown','Planner · paso 6 · Video Les Brown']].map(([k,l])=>`<label class="f">${l}<input class="in" id="l_${k}" value="${esc(S.links[k])}"></label>`).join('')}
+    <button class="btn" data-act="savelinks">Guardar links</button></section>
+  <section class="card tint"><span class="eyebrow">Prototipo</span><p class="small" style="margin:0">Estás usando una versión de prueba. Los datos se guardan solo en este navegador.</p>
+    <div class="row"><button class="btn sm ghost" data-act="cleardemo">Borrar datos de ejemplo</button><button class="btn sm ghost" data-act="reseed">Restaurar ejemplos</button><button class="btn sm danger" data-act="logout">Cerrar sesión</button></div></section>`;
+}
+function countryOptions(sel){ return COUNTRIES.map(c=>`<option value="${c[0]}"${c[0]===sel?' selected':''}>${flag(c[0])} ${esc(c[1])} (+${c[2]})</option>`).join(''); }
+
+/* ---- Autenticación (simulada en el prototipo) ---- */
+let AUTH='login';
+function renderAuth(){
+  const brand=`<div class="logos"><span class="logo riman"></span><span class="sep"></span><span class="logo kwam"></span></div>`;
+  let body='';
+  if(AUTH==='login') body=`<h1 class="display">Seguimiento Mastermind</h1><p class="lead">La herramienta de seguimiento del Equipo RIMAN Mastermind.</p>
+    <form class="panel" id="f_login" style="gap:12px"><label class="f">Correo<input class="in" type="email" id="a_e" required autocomplete="email"></label><label class="f">Contraseña<span class="pw"><input class="in" type="password" id="a_p" required autocomplete="current-password"><button type="button" class="pw-eye" data-act="pw" aria-label="Mostrar contraseña"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg></button></span></label>
+    <button class="btn block" type="submit">Entrar</button></form>
+    <button class="linkbtn" data-act="auth" data-v="forgot">¿Olvidaste tu contraseña?</button>
+    <div class="card tint" style="text-align:center"><span class="small">¿Primera vez?</span><button class="btn ghost" data-act="auth" data-v="reg">Crear mi cuenta</button><button class="linkbtn small" data-act="demo">Probar con la cuenta de ejemplo</button></div>`;
+  if(AUTH==='reg') body=`<h1 class="display">Crea tu cuenta</h1><p class="lead">Solo para distribuidores del equipo.</p>
+    <form class="panel" id="f_reg" style="gap:12px">
+      <div class="row" style="gap:8px"><label class="f" style="flex:1 1 150px">Nombre<input class="in" id="r_n" required autocomplete="given-name"></label><label class="f" style="flex:1 1 150px">Apellido<input class="in" id="r_a" required autocomplete="family-name"></label></div>
+      <label class="f">Correo<input class="in" type="email" id="r_e" required autocomplete="email"></label>
+      <label class="f">Contraseña<span class="pw"><input class="in" type="password" id="r_p" required minlength="6" autocomplete="new-password"><button type="button" class="pw-eye" data-act="pw" aria-label="Mostrar contraseña"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg></button></span></label>
+      <label class="f">País<select class="in" id="r_c">${countryOptions('CL')}</select></label>
+      <label class="f">Código de equipo<input class="in" id="r_k" required placeholder="Te lo entrega tu líder" autocapitalize="characters"></label>
+      <div id="r_err"></div>
+      <button class="btn block" type="submit">Crear cuenta</button></form>
+    <button class="linkbtn" data-act="auth" data-v="login">Ya tengo cuenta</button>`;
+  if(AUTH==='forgot') body=`<h1 class="display">Recupera tu acceso</h1><p class="lead">Te enviaremos un link a tu correo para crear una contraseña nueva.</p>
+    <form class="panel" id="f_forgot" style="gap:12px"><label class="f">Correo<input class="in" type="email" id="fg_e" required></label><button class="btn block" type="submit">Enviar link</button></form>
+    <div id="fg_ok"></div><button class="linkbtn" data-act="auth" data-v="login">Volver</button>`;
+  $('#app').innerHTML=`<div class="brand-page">${brand}<div class="panel">${body}</div></div>`;
+}
+
+/* ---- Test de piel (vista del prospecto) ---- */
+let QZ={i:0,ans:[]};
+function renderTest(){
+  const c=byId(S.testFor) || (S.testName?{nombre:S.testName}:null);
+  const brand=`<div class="logos"><span class="logo riman"></span><span class="sep"></span><span class="logo kwam"></span></div>`;
+  let body;
+  if(QZ.i<QUIZ.length){
+    const Q=QUIZ[QZ.i];
+    body=`${QZ.i===0?`<p class="lead" style="text-align:center;margin:0">Hola${c?' '+esc(c.nombre.split(' ')[0]):''}, responde estas 7 preguntas para conocer tu piel.</p>`:''}
+      <div class="row" style="justify-content:space-between"><span class="eyebrow">Pregunta ${QZ.i+1} de ${QUIZ.length}</span>${QZ.i>0?`<button class="linkbtn small" data-act="qback">← Atrás</button>`:''}</div>
+      <div class="progress"><i style="width:${QZ.i/QUIZ.length*100}%"></i></div>
+      <h1 class="display q">${esc(Q.q)}</h1>
+      <div style="display:flex;flex-direction:column;gap:10px">${Q.o.map((o,j)=>`<button class="opt${QZ.ans[QZ.i]===j?' on':''}" data-act="qans" data-v="${j}">${esc(o[0])}</button>`).join('')}</div>`;
+  } else {
+    body=`<div class="final"><span class="seal">${IC.check}</span><h1 class="display" style="font-size:28px">Gracias${c?', '+esc(c.nombre.split(' ')[0]):''}</h1>
+      <p style="margin:0;font-size:16px">Con esta información vamos a preparar <b>la mejor rutina para tu piel</b>. Muy pronto te contactamos con tu recomendación personalizada.</p>
+      <p class="muted small" style="margin:0">Este test es una orientación y no reemplaza la evaluación de un dermatólogo.</p></div>`;
+  }
+  $('#app').innerHTML=`<div class="brand-page">${brand}<div class="panel">${body}
+    ${S.testOnly?'':'<div class="card tint small" style="margin-top:18px">Vista previa del prospecto. <button class="linkbtn small" data-act="qclose">Volver a la app</button></div>'}</div></div>`;
+}
+
+/* ============ Nuevo contacto (captura + lector) ============ */
+let NEW=null;
+function openNew(){ NEW={mode:'pick',items:[]}; renderSheet(); }
+function closeSheet(){ NEW=null; EDIT=null; $('#sheet-root').innerHTML=''; }
+function renderSheet(){
+  if(EDIT) return renderEdit();
+  if(!NEW) return;
+  let b='';
+  if(NEW.mode==='pick'){
+    const seen=store.get('guide',false);
+    b=`<h2 class="display">Nuevo contacto</h2>
+    <div class="guide"><div class="phone-mini" aria-hidden="true"><i></i><b></b><s></s></div><div class="small"><b>Cómo sacar la captura:</b> en WhatsApp, toca el nombre arriba del chat para abrir el perfil. Saca la captura ahí, donde se ve el número.${seen?'':' <br><span class="muted">Puedes subir varias capturas a la vez.</span>'}</div></div>
+    <label class="btn block" for="shot" style="cursor:pointer">${IC.cam}Subir captura de WhatsApp</label>
+    <input type="file" id="shot" accept="image/*" multiple hidden>
+    <button class="btn ghost block" data-act="manual">${IC.pen}Escribir a mano</button>`;
+  } else {
+    b=`<h2 class="display">${NEW.items.length>1?'Revisa los contactos':'Revisa el contacto'}</h2>${NEW.items.map((it,i)=>itemForm(it,i)).join('')}
+     <div class="row"><button class="btn" data-act="savenew" ${NEW.items.some(x=>x.busy)?'disabled':''}>Guardar</button><button class="btn ghost" data-act="close">Cancelar</button></div>`;
+  }
+  $('#sheet-root').innerHTML=`<div class="sheet-bg" data-act="bg"><div class="sheet" role="dialog" aria-modal="true">${b}</div></div>`;
+}
+function itemForm(it,i){
+  if(it.busy) return `<div class="card tint"><b>Leyendo captura ${NEW.items.length>1?(i+1):''}…</b><div class="progress"><i style="width:${Math.round((it.p||0)*100)}%"></i></div><span class="muted small">${it.p<.3?'Preparando el lector (solo la primera vez tarda un poco más)':'Buscando nombre y número'}</span></div>`;
+  let note='';
+  if(it.ocrFail) note=`<div class="err">No pudimos leer esta captura. Ingresa los datos aquí, o inténtalo con la pantalla del perfil.</div>`;
+  else if(it.fromShot){
+    if(!it.tel && !it.nombre) note=`<div class="err">No encontramos nombre ni número. Sube la captura del perfil del contacto.</div>`;
+    else if(!it.tel) note=`<div class="warn"><b>Falta el número.</b> Abre el perfil del contacto en WhatsApp y saca la captura ahí, o escríbelo abajo.</div>`;
+    else if(!it.nombre) note=`<div class="warn"><b>A este contacto aún le falta el nombre.</b> Agrégalo en tus contactos y vuelve a subir la captura, o escríbelo aquí.${it.sug?` WhatsApp muestra el nombre de perfil <b>${esc(it.sug)}</b>. <button class="linkbtn small" data-act="usesug" data-i="${i}">Usarlo</button>`:''}</div>`;
+    else note=`<div class="okb">✓ Contacto listo. Revisa que los datos estén bien.</div>`;
+  }
+  return `<div class="card" style="gap:10px">${it.thumb?`<img src="${it.thumb}" alt="" style="max-height:110px;width:auto;align-self:flex-start;border-radius:8px;border:1px solid var(--line)">`:''}${note}
+    <label class="f">Nombre<input class="in" data-ni="${i}" data-k="nombre" value="${esc(it.nombre)}" placeholder="Nombre del prospecto"></label>
+    <label class="f">Teléfono<input class="in num" data-ni="${i}" data-k="tel" value="${esc(it.tel)}" inputmode="tel" placeholder="+56 9 1234 5678"></label>
+    <div class="seg"><button class="${it.tipo==='cliente'?'on':''}" data-act="ntipo" data-i="${i}" data-v="cliente">Cliente</button><button class="${it.tipo==='planner'?'on':''}" data-act="ntipo" data-i="${i}" data-v="planner">Planner</button></div></div>`;
+}
+let EDIT=null;
+function renderEdit(){
+  const c=byId(EDIT);
+  $('#sheet-root').innerHTML=`<div class="sheet-bg" data-act="bg"><div class="sheet" role="dialog" aria-modal="true"><h2 class="display">Editar datos</h2>
+    <label class="f">Nombre<input class="in" id="e_n" value="${esc(c.nombre)}"></label>
+    <label class="f">Teléfono<input class="in num" id="e_t" value="${esc(c.tel)}" inputmode="tel"></label>
+    <div class="seg"><button class="${c.tipo==='cliente'?'on':''}" data-act="etipo" data-v="cliente">Cliente</button><button class="${c.tipo==='planner'?'on':''}" data-act="etipo" data-v="planner">Planner</button></div>
+    <p class="muted small" style="margin:0">Si cambias entre Cliente y Planner, el seguimiento vuelve al paso 1.</p>
+    <div class="row"><button class="btn" data-act="saveedit">Guardar</button><button class="btn ghost" data-act="close">Cancelar</button></div></div></div>`;
+}
+
+/* Normaliza teléfonos al formato internacional */
+function normPhone(raw){
+  if(!raw) return '';
+  let s=raw.replace(/[^\d+]/g,'');
+  if(!s) return '';
+  const home=country(S.user.pais)[2];
+  if(s.startsWith('00')) s='+'+s.slice(2);
+  if(s.startsWith('+')) return '+'+s.slice(1).replace(/\D/g,'');
+  s=s.replace(/\D/g,'');
+  if(s.length>=11 && DIALS.some(d=>s.startsWith(d))) return '+'+s;
+  return '+'+home+s.replace(/^0+/,'');
+}
+const UI_WORDS=/^(info|información|editar|buscar|audio|video|videollamada|llamar|llamada|pagar|notificaciones|multimedia|archivos|enlaces|docs|documentos|mensajes|temporales|cifrado|bloquear|reportar|denunciar|añadir|agregar|contacto|contactos|grupos|en común|visibilidad|favoritos|cancelar|compartir|ver todo|todo|hoy|ayer|en línea|escribiendo|última vez|estado|crear|nuevo|existente|guardar|privacidad|whatsapp|business|cuenta|empresa|empresarial|catálogo|chats|llamadas|novedades|comunidades|ajustes|silenciar|vaciar|exportar|elementos|destacados|mensajes destacados|seguridad|conexión|bloqueo|tema|fondo|añadir a favoritos|search|edit|mute|call|voice|share|add|block|report|contact info|disappearing messages|encryption|media|links)[\s.:]*$/i;
+function parseOCR(text){
+  const lines=text.split(/\n/).map(l=>l.replace(/[|•·©®]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+  let telIdx=-1, tel='';
+  const cand=[];
+  lines.forEach((l,i)=>{
+    const m=l.match(/\+?\(?\d[\d\s().-]{6,}\d/g);
+    (m||[]).forEach(x=>{ const d=x.replace(/\D/g,''); if(d.length>=8&&d.length<=15&&!/\d{1,2}:\d{2}/.test(x)) cand.push({x,i,plus:x.trim().startsWith('+'),len:d.length}); });
+  });
+  cand.sort((a,b)=>(b.plus-a.plus)||(b.len-a.len));
+  if(cand[0]){ tel=normPhone(cand[0].x); telIdx=cand[0].i; }
+  const isName=l=>{ const letters=(l.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g)||[]).length; const digits=(l.match(/\d/g)||[]).length; return letters>=2 && digits===0 && l.length<=40 && !UI_WORDS.test(l.replace(/^~\s*/,'')) && !/(info\.?|datos|detalles) del contacto|contact info|editar|perfil|whatsapp/i.test(l) && !/^[a-záéíóúñ]/.test(l.replace(/^~\s*/,'')) ; };
+  let sug=''; const tl=lines.find(l=>/^~\s*\S/.test(l)); if(tl) sug=tl.replace(/^~\s*/,'').trim();
+  let nombre='';
+  if(telIdx>=0){
+    for(let k=telIdx-1;k>=Math.max(0,telIdx-3);k--){ const l=lines[k]; if(isName(l)&&!l.startsWith('~')){ nombre=l; break; } }
+    // si el título es el propio número (contacto no guardado), no hay nombre
+    if(nombre && lines.slice(Math.max(0,telIdx-1),telIdx+1).some(l=>l.startsWith('~'))) nombre='';
+  } else {
+    const n=lines.find(l=>isName(l)&&!l.startsWith('~')&&l.split(' ').length<=4);
+    if(n) nombre=n;
+  }
+  return {nombre:nombre.replace(/[^\p{L}\s'.-]/gu,'').trim(),tel,sug};
+}
+let ocrWorker=null, ocrWarm=null;
+function warmOCR(){
+  if(ocrWarm) return ocrWarm;
+  if(!window.Tesseract) return Promise.reject(new Error('lector no disponible'));
+  const base=location.href.split('#')[0].split('?')[0].replace(/[^/]*$/,'');
+  ocrWarm=Tesseract.createWorker('spa',1,{
+    workerPath:base+'vendor/worker-wrap.js',workerBlobURL:false,corePath:base+'vendor/core',langPath:base+'vendor/lang',
+    logger:m=>{ if(m.status==='recognizing text'&&OCR_CB) OCR_CB(.35+m.progress*.65); else if(OCR_CB&&m.progress) OCR_CB(Math.min(.33,m.progress*.33)); }
+  }).then(w=>ocrWorker=w).catch(e=>{ ocrWarm=null; throw e; });
+  return ocrWarm;
+}
+let OCR_CB=null;
+function prepImage(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file); const img=new Image();
+    img.onload=()=>{ const scale=Math.min(1,1100/img.width); const cv=document.createElement('canvas'); cv.width=Math.round(img.width*scale); cv.height=Math.round(img.height*scale);
+      const g=cv.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(img,0,0,cv.width,cv.height);
+      const t=document.createElement('canvas'); const ts=Math.min(1,220/cv.height); t.width=cv.width*ts; t.height=cv.height*ts; t.getContext('2d').drawImage(cv,0,0,t.width,t.height);
+      URL.revokeObjectURL(url); res({canvas:cv,thumb:t.toDataURL('image/jpeg',.7)}); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('imagen')); };
+    img.src=url;
+  });
+}
+async function handleShots(files){
+  store.set('guide',true);
+  NEW.mode='review';
+  NEW.items=[...files].slice(0,10).map(()=>({busy:true,p:0,nombre:'',tel:'',tipo:'cliente',fromShot:true}));
+  renderSheet();
+  for(let i=0;i<files.length&&i<10;i++){
+    const it=NEW.items[i];
+    try{
+      const {canvas,thumb}=await prepImage(files[i]); it.thumb=thumb;
+      OCR_CB=p=>{ it.p=p; const bar=document.querySelectorAll('.sheet .progress i')[0]; if(bar) bar.style.width=Math.round(p*100)+'%'; };
+      await warmOCR();
+      const r=await ocrWorker.recognize(canvas);
+      Object.assign(it,parseOCR(r.data.text||''));
+    }catch(e){ it.ocrFail=true; }
+    it.busy=false; if(!NEW) return; renderSheet();
+  }
+  OCR_CB=null;
+}
+
+/* ============ Eventos ============ */
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]'); if(!el) return;
+  const a=el.dataset.act, id=el.dataset.id, c=id&&byId(id);
+  if(a==='bg'){ if(e.target===el) closeSheet(); return; }
+  switch(a){
+    case 'nav': S.view=el.dataset.v; S.confirmDel=null; if(S.view!=='ficha') {} render(); scrollTo(0,0); return;
+    case 'open':
+      S.sel=id; S.confirmDel=null;
+      if(!matchMedia('(min-width:900px)').matches){ if(S.view!=='ficha') S.prev=S.view; S.view='ficha'; scrollTo(0,0); }
+      else S.view='contactos';
+      render(); return;
+    case 'toggle': S.open[id]=!S.open[id]; render(); return;
+    case 'tipo': S.tipoTab=el.dataset.v; S.fStep=null; render(); return;
+    case 'fstep': S.fStep=S.fStep===+el.dataset.v?null:+el.dataset.v; render(); return;
+    case 'filter': S.filter=el.dataset.v; render(); return;
+    case 'adv': advance(c); save(); toast(c.estado==='cerrado'?'¡Cerrado!':'Avanzó al paso '+c.paso); render(); return;
+    case 'prev': c.paso--; c.sent=null;c.agenda=null;c.espera=null;c.desde=null; log(c,'Volvió al paso '+c.paso); save(); render(); return;
+    case 'jump': c.paso=CIERRE[c.tipo]; c.sent=null;c.agenda=null;c.espera=null;c.desde=null; log(c,'Saltó al cierre (termómetro '+c.temp+'%)'); save(); render(); return;
+    case 'resp': {
+      const r=el.dataset.r;
+      if(r==='si'){ advance(c); toast('¡Bien! '+c.nombre.split(' ')[0]+' pasa al paso '+c.paso); }
+      if(r==='aun'){ c.espera=addDays(TODAY,2); log(c,'Sin respuesta, reconectar en 2 días'); toast('Te lo recordaré en 2 días'); }
+      if(r==='no'){ c.estado='pausa'; log(c,'No le interesa por ahora'); toast('Pasó a "En pausa"'); }
+      save(); render(); return; }
+    case 'held': if(el.dataset.r==='si'){ log(c,'Reunión realizada'); advance(c); toast('Avanzó al paso '+c.paso); } else { c.agenda=null; c.sent=null; toast('Elige una nueva fecha'); S.sel=c.id; if(!matchMedia('(min-width:900px)').matches){S.prev=S.view;S.view='ficha';} } save(); render(); return;
+    case 'sent': {
+      const re=el.dataset.re==='1';
+      c.sent=TODAY; if(re) c.espera=null;
+      log(c,re?'Mensaje de reconexión enviado':'Paso '+c.paso+' enviado');
+      save(); setTimeout(render,400); return; }
+    case 'copymsg': { const m=$('#msg'); if(m) copyText(m.value); return; }
+    case 'copy': copyText(el.dataset.t); return;
+    case 'tip': { c.ancla=(c.ancla?c.ancla.replace(/\s*$/,'')+'. ':'')+el.dataset.t; save(); render(); return; }
+    case 'obj': c.obj=c.obj===el.dataset.v?null:el.dataset.v; if(c.obj) log(c,'Objeción: '+objByKey(c.obj).n); save(); render(); return;
+    case 'piel': c.piel=el.dataset.v; save(); render(); return;
+    case 'estado': c.estado=el.dataset.v; if(c.estado==='activo'){c.sent=null;c.espera=null;} log(c,c.estado==='cerrado'?'Marcado como cerrado':c.estado==='pausa'?'Puesto en pausa':'Seguimiento reactivado'); save(); toast(c.estado==='cerrado'?'¡Felicitaciones por el cierre!':'Listo'); render(); return;
+    case 'del': S.confirmDel=id; render(); return;
+    case 'delno': S.confirmDel=null; render(); return;
+    case 'delok': S.contacts=S.contacts.filter(x=>x.id!==id); S.sel=null; S.confirmDel=null; S.view=S.view==='ficha'?(S.prev||'contactos'):S.view; save(); toast('Contacto eliminado'); render(); return;
+    case 'agendar': {
+      const f=$('#ag_f').value, h=$('#ag_h').value, z=$('#ag_z').value.trim();
+      if(!f||!h){ toast('Elige día y hora'); return; }
+      c.agenda={fecha:f,hora:h,zoom:z}; c.sent=null; log(c,'Reunión agendada para '+fmtDate(f)+' '+h); save(); toast('Reunión guardada. Ahora envía la invitación.'); render(); return; }
+    case 'test': S.testFor=id; QZ={i:0,ans:[]}; render(); scrollTo(0,0); return;
+    case 'qans': QZ.ans[QZ.i]=+el.dataset.v; QZ.i++; if(QZ.i===QUIZ.length) finishQuiz(); render(); scrollTo(0,0); return;
+    case 'qback': QZ.i=Math.max(0,QZ.i-1); render(); return;
+    case 'qclose': S.testFor=null; render(); return;
+    case 'shareimg': shareImg(c); return;
+    case 'new': openNew(); return;
+    case 'manual': NEW.mode='review'; NEW.items=[{nombre:'',tel:'',tipo:'cliente'}]; renderSheet(); setTimeout(()=>{const i=document.querySelector('[data-ni="0"]'); i&&i.focus();},50); return;
+    case 'usesug': { const it=NEW.items[+el.dataset.i]; it.nombre=it.sug; renderSheet(); return; }
+    case 'ntipo': NEW.items[+el.dataset.i].tipo=el.dataset.v; renderSheet(); return;
+    case 'close': closeSheet(); return;
+    case 'savenew': {
+      const ok=NEW.items.filter(it=>it.nombre.trim()||it.tel.trim());
+      if(!ok.length){ toast('Agrega al menos un nombre o teléfono'); return; }
+      const miss=ok.find(it=>!it.nombre.trim()); if(miss){ toast('Falta el nombre de un contacto'); return; }
+      ok.forEach(it=>S.contacts.push({id:uid(),nombre:it.nombre.trim(),tel:normPhone(it.tel),tipo:it.tipo,paso:1,temp:30,ancla:'',estado:'activo',piel:null,obj:null,objFrase:'',sent:null,espera:null,desde:null,agenda:null,hist:[{f:TODAY,t:'Contacto agregado'}]}));
+      const last=S.contacts[S.contacts.length-1];
+      save(); closeSheet(); toast(ok.length>1?ok.length+' contactos agregados al paso 1':'Agregado al paso 1');
+      S.sel=last.id; if(!matchMedia('(min-width:900px)').matches){ S.prev=S.view; S.view='ficha'; } else S.view='contactos';
+      render(); return; }
+    case 'editc': EDIT=id; renderSheet(); return;
+    case 'etipo': { const ce=byId(EDIT); ce._t=el.dataset.v; document.querySelectorAll('.sheet .seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===el.dataset.v)); return; }
+    case 'saveedit': { const ce=byId(EDIT); ce.nombre=$('#e_n').value.trim()||ce.nombre; ce.tel=normPhone($('#e_t').value); if(ce._t&&ce._t!==ce.tipo){ ce.tipo=ce._t; ce.paso=1; ce.sent=null;ce.agenda=null;ce.espera=null; log(ce,'Cambió a '+ce.tipo); } delete ce._t; save(); closeSheet(); render(); return; }
+    case 'saveuser': S.user.nombre=$('#u_n').value.trim()||S.user.nombre; S.user.apellido=$('#u_a').value.trim(); S.user.pais=$('#u_p').value; save(); toast('Guardado'); render(); return;
+    case 'savelinks': ['kiyosaki','pelicula','academia','lesbrown'].forEach(k=>{ const v=$('#l_'+k).value.trim(); if(v) S.links[k]=v; }); save(); toast('Links actualizados para todo el equipo'); return;
+    case 'cleardemo': S.contacts=S.contacts.filter(c=>!c.ej); S.sel=null; save(); toast('Ejemplos borrados'); render(); return;
+    case 'reseed': S.contacts=S.contacts.filter(c=>!c.ej).concat(seed()); save(); toast('Ejemplos restaurados'); render(); return;
+    case 'logout': S.user=null; save(); AUTH='login'; render(); return;
+    case 'pw': { const inp=el.parentElement.querySelector('input'); const show=inp.type==='password'; inp.type=show?'text':'password'; el.classList.toggle('on',show); el.setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña'); inp.focus(); return; }
+    case 'auth': AUTH=el.dataset.v; render(); return;
+    case 'demo': S.user={nombre:'Gonzalo',apellido:'Águila',email:'demo@mastermind',pais:'CL'}; save(); S.view='hoy'; render(); warmLater(); return;
+  }
+});
+document.addEventListener('submit',e=>{
+  e.preventDefault();
+  const f=e.target.id;
+  if(f==='f_login'){ const em=$('#a_e').value.trim(); const saved=store.get('account',null);
+    if(saved&&saved.email===em){ S.user=saved; } else { S.user={nombre:em.split('@')[0].replace(/^./,x=>x.toUpperCase()),apellido:'',email:em,pais:'CL'}; }
+    save(); S.view='hoy'; render(); warmLater(); }
+  if(f==='f_reg'){ const k=$('#r_k').value.trim().toUpperCase();
+    if(k!=='MASTERMIND'){ $('#r_err').innerHTML='<div class="err">El código de equipo no es válido. Pídeselo a tu líder.</div>'; return; }
+    S.user={nombre:$('#r_n').value.trim(),apellido:$('#r_a').value.trim(),email:$('#r_e').value.trim(),pais:$('#r_c').value};
+    store.set('account',S.user); save(); S.view='hoy'; render(); toast('¡Bienvenido, '+S.user.nombre+'!'); warmLater(); }
+  if(f==='f_forgot'){ $('#fg_ok').innerHTML='<div class="okb">Si el correo está registrado, te llegará un link para crear una contraseña nueva. Revisa también tu carpeta de spam.</div>'; }
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.id==='search'){ S.q=t.value; const L=filtered(); $('#clist').innerHTML=L.length?L.map(c=>contactRow(c)).join(''):'<div class="empty">No hay contactos con este filtro.</div>'; return; }
+  if(t.id==='temp'){ const c=byId(t.dataset.id); c.temp=+t.value; $('#tval').textContent=c.temp+'%'; $('#tval').style.color=tempColor(c.temp); $('#tlab').textContent=tempLabel(c.temp); save(); return; }
+  if(t.id==='ancla'){ byId(t.dataset.id).ancla=t.value; save(); return; }
+  if(t.id==='objf'){ byId(t.dataset.id).objFrase=t.value; save(); return; }
+  if(t.id==='msg'){ const c=byId(t.dataset.id); $('#wa').href=waHref(c,t.value); return; }
+  if(t.id==='calc'){ const v=parseFloat(t.value.replace(/[^\d.,]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'))||0; $('#calcout').innerHTML=calcHTML(v); const l=$('#calcline'); l.hidden=!v; if(v) l.textContent=`“Esta rutina te dura 5 meses. Son ${money(v/5)} al mes, es decir, ${money(v/150)} al día por la piel que quieres.”`; return; }
+  if(t.dataset.ni!==undefined){ NEW.items[+t.dataset.ni][t.dataset.k]=t.value; return; }
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='temp'){ const c=byId(e.target.dataset.id); log(c,'Termómetro en '+c.temp+'%'); save(); render(); }
+  if(e.target.id==='shot' && e.target.files.length) handleShots(e.target.files);
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
+
+function finishQuiz(){
+  const c=byId(S.testFor); if(!c) return;
+  c.piel=scoreQuiz(QZ.ans);
+  log(c,'Respondió el test: '+SKIN[c.piel].n);
+  if(c.estado==='activo' && c.tipo==='cliente' && c.paso===3){ c.paso=4; c.sent=null; c.espera=null; c.desde=addDays(TODAY,1); log(c,'Pasa a recomendación (mañana)'); }
+  save();
+}
+async function shareImg(c){
+  try{
+    const blob=await (await fetch(SKIN[c.piel].img)).blob();
+    const file=new File([blob],'rutina-'+c.piel+'.jpg',{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],text:fill(step(c).msg,c)}); return; }
+    throw 0;
+  }catch(e){ toast('En la app final se comparte directo a WhatsApp. Por ahora, mantén presionada la imagen para guardarla.'); }
+}
+function warmLater(){ setTimeout(()=>{ warmOCR().catch(()=>{}); },1500); }
+let lastWide=matchMedia('(min-width:900px)').matches;
+addEventListener('resize',()=>{ const w=matchMedia('(min-width:900px)').matches; if(w!==lastWide){ lastWide=w; if(w&&S.view==='ficha') S.view='contactos'; render(); } });
+
+/* Link del test: #test-<id> abre la vista del prospecto */
+(function(){
+  let p; try{ p=new URLSearchParams(location.search); }catch(e){ p=null; }
+  if(p&&p.get('test')){ S.testFor=p.get('test'); S.testName=p.get('n')||''; S.testOnly=true; return; }
+  const m=location.hash.match(/^#test-(\w+)$/); if(m&&S.user&&byId(m[1])){ S.testFor=m[1]; }
+})();
+if(S.testOnly) renderTest(); else render();
+if(S.user&&!S.testOnly) warmLater();
+</script>
+
+</body>
+</html>
