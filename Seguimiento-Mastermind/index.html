@@ -129,6 +129,12 @@ textarea.in{min-height:120px;resize:vertical;line-height:1.45}
 .pw-eye .slash{display:none}
 .pw-eye.on{color:var(--green)}
 .pw-eye.on .slash{display:inline}
+.sync{width:10px;height:10px;border-radius:50%;background:var(--ok);display:inline-block;transition:background .3s}
+.sync.saving{background:var(--warm)}
+.sync.off{background:var(--hot)}
+.boot{min-height:100%;display:grid;place-items:center;padding:40px 16px}
+.spin{width:28px;height:28px;border-radius:50%;border:3px solid var(--sage);border-top-color:var(--green);animation:sp 0.9s linear infinite;margin:18px auto 0}
+@keyframes sp{to{transform:rotate(360deg)}}
 /* Cards & lists */
 .card{border:1px solid var(--line);border-radius:var(--r);padding:16px;background:var(--bg);display:flex;flex-direction:column;gap:12px}
 .card.tint{background:var(--surface);border-color:transparent}
@@ -273,6 +279,7 @@ textarea.in{min-height:120px;resize:vertical;line-height:1.45}
 <div id="tut-root"></div>
 <div id="toast-root"></div>
 
+<script src="vendor/supabase.js"></script>
 <script src="vendor/tesseract.min.js"></script>
 <script>
 /* ============ Utilidades ============ */
@@ -284,7 +291,8 @@ const TODAY = iso(today());
 const addDays = (s,n) => { const d=new Date(s+'T00:00:00'); d.setDate(d.getDate()+n); return iso(d); };
 const fmtDate = s => { if(!s) return ''; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('es',{weekday:'short',day:'numeric',month:'short'}); };
 const initials = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
-const uid = () => Math.random().toString(36).slice(2,10);
+const uid = () => { try{ if(crypto.randomUUID) return crypto.randomUUID(); }catch(e){} return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,ch=>{ const r=Math.random()*16|0; return (ch==='x'?r:(r&3|8)).toString(16); }); };
+const isUUID = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s||'');
 const store = {
   get(k,d){ try{ const v=localStorage.getItem('sm_'+k); return v?JSON.parse(v):d; }catch(e){ return d; } },
   set(k,v){ try{ localStorage.setItem('sm_'+k,JSON.stringify(v)); }catch(e){} }
@@ -398,14 +406,95 @@ const isLive = st => st.kind==='live' || st.kind==='zoom';
 const ANCLA_TIPS = ['Tiene manchas que le acomplejan','Se casa en marzo','Quiere dejar su trabajo','Viaja en diciembre','Su hija tiene acné','Busca un ingreso extra','Le encantó la textura del gel','Duerme poco por los niños'];
 
 /* ============ Estado ============ */
+/* ============ Nube (Supabase) ============ */
+const SB_URL='https://vuziqrqcjjywocwdvbci.supabase.co';
+const SB_KEY='sb_publishable_LQaLV9UFznmxfITa2mYbkw_XEMvEMa6';
+let sb=null;
+try{ if(window.supabase) sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'sm_auth'}}); }catch(e){ sb=null; }
+
+const demoMode = store.get('mode','')==='demo';
 let S = {
-  user: store.get('user', null),
+  mode: demoMode?'demo':'cloud',
+  uid:null,
+  user: demoMode ? store.get('user', null) : null,
   links: store.get('links', DEFAULT_LINKS),
-  contacts: store.get('contacts', null),
+  contacts: demoMode ? store.get('contacts', null) : [],
   view:'hoy', sel:null, tipoTab:'cliente', fStep:null, filter:'todos', q:'', open:{},
-  testFor:null
+  testFor:null, booting: !demoMode, sync:'ok'
 };
-function save(){ store.set('user',S.user); store.set('links',S.links); store.set('contacts',S.contacts); }
+let SYNCED={}, syncTimer=null, syncing=false;
+function save(){
+  if(S.mode==='demo'){ store.set('user',S.user); store.set('links',S.links); store.set('contacts',S.contacts); return; }
+  if(S.uid){ store.set('cache_'+S.uid,{user:S.user,contacts:S.contacts}); }
+  clearTimeout(syncTimer); syncTimer=setTimeout(syncNow,700);
+}
+function setSync(st){ S.sync=st; const el=document.getElementById('syncdot'); if(el){ el.className='sync '+st; el.title=st==='ok'?'Guardado en la nube':st==='saving'?'Guardando…':'Sin conexión: se guardará al volver'; } }
+async function syncNow(){
+  if(S.mode!=='cloud'||!sb||!S.uid) return;
+  if(syncing){ clearTimeout(syncTimer); syncTimer=setTimeout(syncNow,800); return; }
+  syncing=true;
+  const cur={}; S.contacts.forEach(c=>{ cur[c.id]=JSON.stringify(c); });
+  const up=[]; for(const id in cur){ if(SYNCED[id]!==cur[id]) up.push({id,owner:S.uid,data:JSON.parse(cur[id]),actualizado:new Date().toISOString()}); }
+  const del=Object.keys(SYNCED).filter(id=>!(id in cur));
+  if(!up.length && !del.length){ syncing=false; setSync('ok'); return; }
+  setSync('saving');
+  try{
+    if(up.length){ const {error}=await sb.from('seg_contactos').upsert(up); if(error) throw error; up.forEach(r=>SYNCED[r.id]=cur[r.id]); }
+    if(del.length){ const {error}=await sb.from('seg_contactos').delete().in('id',del); if(error) throw error; del.forEach(id=>delete SYNCED[id]); }
+    setSync('ok');
+  }catch(e){ console.warn('sync',e); setSync('off'); clearTimeout(syncTimer); syncTimer=setTimeout(syncNow,8000); }
+  syncing=false;
+}
+async function loadCloud(user){
+  S.uid=user.id;
+  const cache=store.get('cache_'+S.uid,null);
+  if(cache){ S.user=cache.user; S.contacts=cache.contacts||[]; }
+  const [pf,ct,aj]=await Promise.all([
+    sb.from('seg_perfiles').select('*').eq('id',S.uid).maybeSingle(),
+    sb.from('seg_contactos').select('id,data').order('actualizado',{ascending:true}),
+    sb.from('seg_ajustes').select('valor').eq('clave','links').maybeSingle()
+  ]);
+  if(pf.error && ct.error && !cache) throw pf.error;
+  const p=pf.data, md=user.user_metadata||{};
+  S.user={nombre:(p&&p.nombre)||md.nombre||(user.email||'').split('@')[0],apellido:(p&&p.apellido)||md.apellido||'',email:user.email,pais:(p&&p.pais)||md.pais||'CL',admin:!!(p&&p.es_admin)};
+  if(!ct.error){
+    const server=(ct.data||[]).map(r=>Object.assign({},r.data,{id:r.id}));
+    SYNCED={}; server.forEach(c=>SYNCED[c.id]=JSON.stringify(c));
+    // conserva lo creado sin conexión que aún no subió
+    const ids=new Set(server.map(c=>c.id));
+    const pending=(cache&&cache.contacts||[]).filter(c=>!ids.has(c.id)&&!c._synced);
+    S.contacts=server.concat(pending);
+  }
+  if(aj.data&&aj.data.valor) S.links=Object.assign({},DEFAULT_LINKS,aj.data.valor);
+  store.set('links',S.links);
+  save();
+}
+async function refreshCloud(){
+  if(S.mode!=='cloud'||!sb||!S.uid||syncing) return;
+  const {data,error}=await sb.from('seg_contactos').select('id,data');
+  if(error||!data) return;
+  let changed=false;
+  data.forEach(r=>{
+    const srv=Object.assign({},r.data,{id:r.id}), js=JSON.stringify(srv);
+    const i=S.contacts.findIndex(c=>c.id===r.id);
+    const local=i>=0?JSON.stringify(S.contacts[i]):null;
+    if(SYNCED[r.id]!==js && (i<0 || local===SYNCED[r.id])){ if(i>=0) S.contacts[i]=srv; else S.contacts.push(srv); SYNCED[r.id]=js; changed=true; }
+  });
+  if(changed){ store.set('cache_'+S.uid,{user:S.user,contacts:S.contacts}); if(!S.testFor&&!NEW&&!EDIT&&!document.activeElement.matches('input,textarea')) render(); }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') refreshCloud(); else syncNow(); });
+addEventListener('online',()=>syncNow());
+const authMsg = e => {
+  const m=((e&&e.message)||'')+'';
+  if(/CODIGO_INVALIDO|Database error saving new user/i.test(m)) return 'El código de equipo no es válido. Pídeselo a tu líder.';
+  if(/Invalid login credentials/i.test(m)) return 'Correo o contraseña incorrectos.';
+  if(/already registered|already been registered|User already/i.test(m)) return 'Este correo ya tiene una cuenta. Entra con tu contraseña o recupérala.';
+  if(/Password should be at least|weak/i.test(m)) return 'La contraseña debe tener al menos 6 caracteres.';
+  if(/rate limit|too many/i.test(m)) return 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.';
+  if(/Email not confirmed/i.test(m)) return 'Tu correo aún no está confirmado.';
+  if(/Failed to fetch|NetworkError|network/i.test(m)) return 'No hay conexión a internet. Revisa tu señal e inténtalo de nuevo.';
+  return 'No se pudo completar. '+m;
+};
 
 function seed(){
   const N=[['Camila Rojas','cliente',1,35,'Tiene manchas que le acomplejan'],['Valentina Soto','cliente',1,20,''],['Javiera Muñoz','cliente',2,55,'Se casa en marzo, quiere verse radiante'],['Fernanda Díaz','cliente',2,40,'Le encantó la textura del gel'],['Paula Herrera','cliente',2,30,''],['Catalina Pérez','cliente',3,62,'Su hija tiene acné'],['Andrea Castro','cliente',3,48,''],['Daniela Vargas','cliente',4,84,'Viaja a Europa en diciembre'],['Constanza Reyes','cliente',4,58,''],['Macarena Torres','cliente',5,90,'Quiere una rutina simple, trabaja de noche'],['Francisca Silva','cliente',6,66,'Dijo que lo conversaría con su esposo'],['Carolina Flores','cliente',7,72,''],
@@ -430,7 +519,7 @@ function seed(){
   arr.push({id:uid(),nombre:'Bárbara Ortiz',tel:'+56987770012',tipo:'cliente',paso:3,temp:10,ancla:'',estado:'pausa',piel:null,obj:'caro',objFrase:'',sent:null,espera:null,desde:null,agenda:null,ej:true,hist:[]});
   return arr;
 }
-if(!S.contacts) S.contacts = seed();
+if(S.mode==='demo' && !S.contacts) S.contacts = seed();
 
 /* ============ Lógica de seguimiento ============ */
 const tempColor = t => t>=70 ? 'var(--hot)' : t>=40 ? 'var(--warm)' : 'var(--cold)';
@@ -483,10 +572,12 @@ function waHref(c,text){
 /* ============ Render ============ */
 function render(){
   if(S.testOnly||(S.user&&S.testFor)) return renderTest();
+  if(S.booting) return renderBoot();
+  if(AUTH==='newpw') return renderAuth();
   if(!S.user) return renderAuth();
   const views={hoy:['Hoy',IC.hoy],embudo:['Embudo',IC.embudo],contactos:['Contactos',IC.contactos],objeciones:['Objeciones',IC.obj]};
   const navBtn=(k,cls)=>`<button class="${cls}${S.view===k?' on':''}" data-act="nav" data-v="${k}">${views[k][1]}<span>${views[k][0]}</span></button>`;
-  const demo = S.contacts.some(c=>c.ej) ? '<span class="demo-badge">Datos de ejemplo</span>' : '';
+  const demo = S.mode==='demo' ? '<span class="demo-badge">Cuenta de ejemplo</span>' : `<span id="syncdot" class="sync ${S.sync}" title="Guardado en la nube"></span>`;
   $('#app').innerHTML = `<div class="shell">
     <aside class="side">
       <div class="logos" style="flex-direction:column;align-items:flex-start;gap:10px"><span class="logo riman"></span><span class="logo kwam"></span></div>
@@ -706,22 +797,25 @@ function viewAjustes(){
     <div class="row" style="gap:8px"><label class="f" style="flex:1 1 160px">Nombre<input class="in" id="u_n" value="${esc(u.nombre)}"></label><label class="f" style="flex:1 1 160px">Apellido<input class="in" id="u_a" value="${esc(u.apellido||'')}"></label></div>
     <label class="f">País<select class="in" id="u_p">${countryOptions(u.pais)}</select></label>
     <button class="btn" data-act="saveuser">Guardar</button></section>
-  <section class="card"><span class="eyebrow">Panel de administrador</span><p class="muted small" style="margin:0">En la versión final solo tú verás esta sección. Lo que cambies aquí le llega a todo el equipo.</p>
+  ${(S.mode==='demo'||u.admin)?`<section class="card"><span class="eyebrow">Panel de administrador</span><p class="muted small" style="margin:0">${S.mode==='demo'?'En la cuenta de ejemplo los cambios quedan solo en este celular.':'Solo tú ves esta sección. Lo que cambies aquí le llega a todo el equipo.'}</p>
     ${[['kiyosaki','Planner · paso 1 · Video Kiyosaki'],['pelicula','Clientes · paso 2 · Película de RIMAN'],['academia','Academia K-WAM (testimonios y masterclass)'],['lesbrown','Planner · paso 6 · Video Les Brown']].map(([k,l])=>`<label class="f">${l}<input class="in" id="l_${k}" value="${esc(S.links[k])}"></label>`).join('')}
-    <button class="btn" data-act="savelinks">Guardar links</button></section>
-  <section class="card tint"><span class="eyebrow">Prototipo</span><p class="small" style="margin:0">Estás usando una versión de prueba. Los datos se guardan solo en este navegador.</p>
-    <div class="row"><button class="btn sm ghost" data-act="cleardemo">Borrar datos de ejemplo</button><button class="btn sm ghost" data-act="reseed">Restaurar ejemplos</button><button class="btn sm danger" data-act="logout">Cerrar sesión</button></div></section>`;
+    <button class="btn" data-act="savelinks">Guardar links</button></section>`:''}
+  ${S.mode==='demo'?`<section class="card tint"><span class="eyebrow">Cuenta de ejemplo</span><p class="small" style="margin:0">Estás probando con datos de ejemplo que se guardan solo en este celular. Para usar la app de verdad, cierra sesión y crea tu cuenta.</p>
+    <div class="row"><button class="btn sm ghost" data-act="cleardemo">Borrar ejemplos</button><button class="btn sm ghost" data-act="reseed">Restaurar ejemplos</button></div></section>`
+  :`<section class="card tint"><span class="eyebrow">Tus datos</span><p class="small" style="margin:0">Tus prospectos se guardan en la nube con tu cuenta <b>${esc(u.email||'')}</b>. Si cambias de celular, entra con el mismo correo y estará todo.</p></section>`}
+  <button class="btn danger" data-act="logout">Cerrar sesión</button>`;
 }
 function countryOptions(sel){ return COUNTRIES.map(c=>`<option value="${c[0]}"${c[0]===sel?' selected':''}>${flag(c[0])} ${esc(c[1])} (+${c[2]})</option>`).join(''); }
 
-/* ---- Autenticación (simulada en el prototipo) ---- */
+/* ---- Autenticación ---- */
 let AUTH='login';
+function renderBoot(){ $('#app').innerHTML=`<div class="brand-page"><div class="logos"><span class="logo riman"></span><span class="sep"></span><span class="logo kwam"></span></div><div class="spin" role="status" aria-label="Cargando"></div></div>`; }
 function renderAuth(){
   const brand=`<div class="logos"><span class="logo riman"></span><span class="sep"></span><span class="logo kwam"></span></div>`;
   let body='';
   if(AUTH==='login') body=`<h1 class="display">Seguimiento Mastermind</h1><p class="lead">La herramienta de seguimiento del Equipo RIMAN Mastermind.</p>
     <form class="panel" id="f_login" style="gap:12px"><label class="f">Correo<input class="in" type="email" id="a_e" required autocomplete="email"></label><label class="f">Contraseña<span class="pw"><input class="in" type="password" id="a_p" required autocomplete="current-password"><button type="button" class="pw-eye" data-act="pw" aria-label="Mostrar contraseña"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg></button></span></label>
-    <button class="btn block" type="submit">Entrar</button></form>
+    <div id="l_err"></div><button class="btn block" type="submit" id="l_btn">Entrar</button></form>
     <button class="linkbtn" data-act="auth" data-v="forgot">¿Olvidaste tu contraseña?</button>
     <div class="card tint" style="text-align:center"><span class="small">¿Primera vez?</span><button class="btn ghost" data-act="auth" data-v="reg">Crear mi cuenta</button><button class="linkbtn small" data-act="demo">Probar con la cuenta de ejemplo</button></div>`;
   if(AUTH==='reg') body=`<h1 class="display">Crea tu cuenta</h1><p class="lead">Solo para distribuidores del equipo.</p>
@@ -732,8 +826,11 @@ function renderAuth(){
       <label class="f">País<select class="in" id="r_c">${countryOptions('CL')}</select></label>
       <label class="f">Código de equipo<input class="in" id="r_k" required placeholder="Te lo entrega tu líder" autocapitalize="characters"></label>
       <div id="r_err"></div>
-      <button class="btn block" type="submit">Crear cuenta</button></form>
+      <button class="btn block" type="submit" id="r_btn">Crear cuenta</button></form>
     <button class="linkbtn" data-act="auth" data-v="login">Ya tengo cuenta</button>`;
+  if(AUTH==='newpw') body=`<h1 class="display">Crea tu nueva contraseña</h1><p class="lead">Escribe una contraseña nueva para tu cuenta.</p>
+    <form class="panel" id="f_newpw" style="gap:12px"><label class="f">Nueva contraseña<span class="pw"><input class="in" type="password" id="np_p" required minlength="6" autocomplete="new-password"><button type="button" class="pw-eye" data-act="pw" aria-label="Mostrar contraseña"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg></button></span></label>
+    <div id="np_err"></div><button class="btn block" type="submit">Guardar contraseña</button></form>`;
   if(AUTH==='forgot') body=`<h1 class="display">Recupera tu acceso</h1><p class="lead">Te enviaremos un link a tu correo para crear una contraseña nueva.</p>
     <form class="panel" id="f_forgot" style="gap:12px"><label class="f">Correo<input class="in" type="email" id="fg_e" required></label><button class="btn block" type="submit">Enviar link</button></form>
     <div id="fg_ok"></div><button class="linkbtn" data-act="auth" data-v="login">Volver</button>`;
@@ -1019,11 +1116,22 @@ document.addEventListener('click',e=>{
     case 'editc': EDIT=id; renderSheet(); return;
     case 'etipo': { const ce=byId(EDIT); ce._t=el.dataset.v; document.querySelectorAll('.sheet .seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===el.dataset.v)); return; }
     case 'saveedit': { const ce=byId(EDIT); ce.nombre=$('#e_n').value.trim()||ce.nombre; ce.tel=normPhone($('#e_t').value); if(ce._t&&ce._t!==ce.tipo){ ce.tipo=ce._t; ce.paso=1; ce.sent=null;ce.agenda=null;ce.espera=null; log(ce,'Cambió a '+ce.tipo); } delete ce._t; save(); closeSheet(); render(); return; }
-    case 'saveuser': S.user.nombre=$('#u_n').value.trim()||S.user.nombre; S.user.apellido=$('#u_a').value.trim(); S.user.pais=$('#u_p').value; save(); toast('Guardado'); render(); return;
-    case 'savelinks': ['kiyosaki','pelicula','academia','lesbrown'].forEach(k=>{ const v=$('#l_'+k).value.trim(); if(v) S.links[k]=v; }); save(); toast('Links actualizados para todo el equipo'); return;
+    case 'saveuser': {
+      S.user.nombre=$('#u_n').value.trim()||S.user.nombre; S.user.apellido=$('#u_a').value.trim(); S.user.pais=$('#u_p').value; save();
+      if(S.mode==='cloud'&&sb) sb.from('seg_perfiles').update({nombre:S.user.nombre,apellido:S.user.apellido,pais:S.user.pais}).eq('id',S.uid).then(({error})=>toast(error?'No se pudo guardar. Revisa tu conexión.':'Guardado'));
+      else toast('Guardado');
+      render(); return; }
+    case 'savelinks': {
+      const nl=Object.assign({},S.links); ['kiyosaki','pelicula','academia','lesbrown'].forEach(k=>{ const v=$('#l_'+k).value.trim(); if(v) nl[k]=v; });
+      if(S.mode==='cloud'&&sb){ sb.from('seg_ajustes').upsert({clave:'links',valor:nl}).then(({error})=>{ if(error) toast('No se pudieron guardar los links.'); else { S.links=nl; store.set('links',nl); toast('Links actualizados para todo el equipo'); } }); }
+      else { S.links=nl; save(); toast('Links guardados en este celular'); }
+      return; }
     case 'cleardemo': S.contacts=S.contacts.filter(c=>!c.ej); S.sel=null; save(); toast('Ejemplos borrados'); render(); return;
     case 'reseed': S.contacts=S.contacts.filter(c=>!c.ej).concat(seed()); save(); toast('Ejemplos restaurados'); render(); return;
-    case 'logout': S.user=null; save(); AUTH='login'; render(); return;
+    case 'logout': {
+      if(S.mode==='demo'){ S.user=null; store.set('user',null); store.set('mode',''); S.mode='cloud'; S.contacts=[]; AUTH='login'; render(); return; }
+      syncNow().finally(async()=>{ try{ await sb.auth.signOut(); }catch(e){} S.user=null; S.uid=null; S.contacts=[]; SYNCED={}; AUTH='login'; S.view='hoy'; render(); });
+      return; }
     case 'pw': { const inp=el.parentElement.querySelector('input'); const show=inp.type==='password'; inp.type=show?'text':'password'; el.classList.toggle('on',show); el.setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña'); inp.focus(); return; }
     case 'tutopen': openTut(0); return;
     case 'tutnext': TUT.i++; renderTut(); return;
@@ -1032,20 +1140,46 @@ document.addEventListener('click',e=>{
     case 'tutos': TUT.os=el.dataset.v; renderTut(); return;
     case 'tutinstall': if(INSTALL_PROMPT){ INSTALL_PROMPT.prompt(); INSTALL_PROMPT.userChoice.finally(()=>{ INSTALL_PROMPT=null; renderTut(); }); } return;
     case 'auth': AUTH=el.dataset.v; render(); return;
-    case 'demo': S.user={nombre:'Gonzalo',apellido:'Águila',email:'demo@mastermind',pais:'CL'}; save(); S.view='hoy'; render(); warmLater(); maybeTutorial(); return;
+    case 'demo': S.mode='demo'; store.set('mode','demo'); S.user={nombre:'Invitado',apellido:'',email:'demo@mastermind',pais:'CL'}; S.contacts=store.get('contacts',null)||seed(); save(); S.view='hoy'; render(); warmLater(); maybeTutorial(); return;
   }
 });
 document.addEventListener('submit',e=>{
   e.preventDefault();
   const f=e.target.id;
-  if(f==='f_login'){ const em=$('#a_e').value.trim(); const saved=store.get('account',null);
-    if(saved&&saved.email===em){ S.user=saved; } else { S.user={nombre:em.split('@')[0].replace(/^./,x=>x.toUpperCase()),apellido:'',email:em,pais:'CL'}; }
-    save(); S.view='hoy'; render(); warmLater(); maybeTutorial(); }
-  if(f==='f_reg'){ const k=$('#r_k').value.trim().toUpperCase();
-    if(k!=='MASTERMIND'){ $('#r_err').innerHTML='<div class="err">El código de equipo no es válido. Pídeselo a tu líder.</div>'; return; }
-    S.user={nombre:$('#r_n').value.trim(),apellido:$('#r_a').value.trim(),email:$('#r_e').value.trim(),pais:$('#r_c').value};
-    store.set('account',S.user); save(); S.view='hoy'; render(); warmLater(); maybeTutorial(); }
-  if(f==='f_forgot'){ $('#fg_ok').innerHTML='<div class="okb">Si el correo está registrado, te llegará un link para crear una contraseña nueva. Revisa también tu carpeta de spam.</div>'; }
+  const busy=(id,on,txt)=>{ const b=$('#'+id); if(b){ b.disabled=on; if(txt) b.textContent=txt; } };
+  const noCloud=()=>!sb;
+  if(f==='f_login'){
+    if(noCloud()){ $('#l_err').innerHTML='<div class="err">No se pudo conectar. Revisa tu internet y recarga la página.</div>'; return; }
+    busy('l_btn',true,'Entrando…'); $('#l_err').innerHTML='';
+    sb.auth.signInWithPassword({email:$('#a_e').value.trim(),password:$('#a_p').value}).then(async({data,error})=>{
+      if(error){ busy('l_btn',false,'Entrar'); $('#l_err').innerHTML=`<div class="err">${esc(authMsg(error))}</div>`; return; }
+      await enterCloud(data.user);
+    });
+  }
+  if(f==='f_reg'){
+    if(noCloud()){ $('#r_err').innerHTML='<div class="err">No se pudo conectar. Revisa tu internet y recarga la página.</div>'; return; }
+    busy('r_btn',true,'Creando cuenta…'); $('#r_err').innerHTML='';
+    const meta={nombre:$('#r_n').value.trim(),apellido:$('#r_a').value.trim(),pais:$('#r_c').value,codigo:$('#r_k').value.trim().toUpperCase()};
+    sb.auth.signUp({email:$('#r_e').value.trim(),password:$('#r_p').value,options:{data:meta}}).then(async({data,error})=>{
+      if(!error && data && data.user && Array.isArray(data.user.identities) && data.user.identities.length===0) error={message:'User already registered'};
+      if(error){ busy('r_btn',false,'Crear cuenta'); $('#r_err').innerHTML=`<div class="err">${esc(authMsg(error))}</div>`; return; }
+      if(!data.session){ busy('r_btn',false,'Crear cuenta'); $('#r_err').innerHTML='<div class="okb">¡Cuenta creada! Revisa tu correo para confirmarla y luego entra con tu contraseña.</div>'; return; }
+      await enterCloud(data.user); toast('¡Bienvenido, '+(S.user?S.user.nombre:'')+'!');
+    });
+  }
+  if(f==='f_forgot'){
+    if(noCloud()) return;
+    const redirect=location.href.split('#')[0].split('?')[0];
+    sb.auth.resetPasswordForEmail($('#fg_e').value.trim(),{redirectTo:redirect}).then(({error})=>{
+      $('#fg_ok').innerHTML = error && /rate|too many/i.test(error.message||'') ? `<div class="err">${esc(authMsg(error))}</div>` : '<div class="okb">Si el correo está registrado, te llegará un link para crear una contraseña nueva. Revisa también tu carpeta de spam.</div>';
+    });
+  }
+  if(f==='f_newpw'){
+    sb.auth.updateUser({password:$('#np_p').value}).then(async({data,error})=>{
+      if(error){ $('#np_err').innerHTML=`<div class="err">${esc(authMsg(error))}</div>`; return; }
+      AUTH='login'; toast('Contraseña actualizada'); await enterCloud(data.user);
+    });
+  }
 });
 document.addEventListener('input',e=>{
   const t=e.target;
@@ -1064,6 +1198,11 @@ document.addEventListener('change',e=>{
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(TUT!==null) closeTut(); else closeSheet(); } });
 
 function finishQuiz(){
+  if(S.testOnly){
+    const piel=scoreQuiz(QZ.ans);
+    if(sb && isUUID(S.testFor)) sb.rpc('seg_guardar_test',{p_id:S.testFor,p_piel:piel}).then(({error})=>{ if(error) console.warn(error); });
+    return;
+  }
   const c=byId(S.testFor); if(!c) return;
   c.piel=scoreQuiz(QZ.ans);
   log(c,'Respondió el test: '+SKIN[c.piel].n);
@@ -1088,8 +1227,27 @@ addEventListener('resize',()=>{ const w=matchMedia('(min-width:900px)').matches;
   if(p&&p.get('test')){ S.testFor=p.get('test'); S.testName=p.get('n')||''; S.testOnly=true; return; }
   const m=location.hash.match(/^#test-(\w+)$/); if(m&&S.user&&byId(m[1])){ S.testFor=m[1]; }
 })();
-if(S.testOnly) renderTest(); else render();
-if(S.user&&!S.testOnly){ warmLater(); maybeTutorial(); }
+async function enterCloud(user){
+  S.mode='cloud'; store.set('mode','');
+  try{ await loadCloud(user); }
+  catch(e){ console.warn(e); S.user={nombre:(user.user_metadata&&user.user_metadata.nombre)||'',apellido:'',email:user.email,pais:'CL'}; toast('Sin conexión: mostrando tus datos guardados en este celular'); }
+  S.booting=false; S.view='hoy'; render(); warmLater(); maybeTutorial();
+}
+(async function boot(){
+  if(S.testOnly){ renderTest(); return; }
+  if(S.mode==='demo'){ S.booting=false; render(); if(S.user){ warmLater(); maybeTutorial(); } return; }
+  renderBoot();
+  if(!sb){ S.booting=false; render(); return; }
+  sb.auth.onAuthStateChange((ev,session)=>{
+    if(ev==='PASSWORD_RECOVERY'){ AUTH='newpw'; S.user=null; S.booting=false; render(); }
+  });
+  let session=null;
+  try{ const r=await sb.auth.getSession(); session=r.data&&r.data.session; }catch(e){}
+  if(AUTH==='newpw') return;
+  if(/type=recovery/.test(location.hash)){ AUTH='newpw'; S.booting=false; render(); return; }
+  if(session&&session.user){ await enterCloud(session.user); }
+  else { S.booting=false; render(); }
+})();
 </script>
 
 </body>
