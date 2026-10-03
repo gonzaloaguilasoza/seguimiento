@@ -108,10 +108,13 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .btn svg{width:18px;height:18px;flex:none}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .row>.btn{flex:1 1 140px}
+.btn-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn-pair .btn{white-space:nowrap;min-height:50px}
+.in::placeholder{color:var(--muted);opacity:.55}
 label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
 .in{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px 14px;font-size:16px;color:var(--ink);min-height:46px}
 .in:focus{border-color:var(--green-2);outline:none;box-shadow:0 0 0 3px var(--sage)}
-textarea.in{min-height:96px;resize:vertical;line-height:1.45}
+textarea.in{min-height:120px;resize:vertical;line-height:1.45}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--ink)}
 .chip.on{background:var(--green);border-color:var(--green);color:var(--on-green)}
@@ -225,6 +228,23 @@ textarea.in{min-height:96px;resize:vertical;line-height:1.45}
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:40;max-width:calc(100% - 32px);text-align:center}
 @media (min-width:900px){.toast{bottom:28px}}
 
+/* Tutorial */
+.tut-bg{position:fixed;inset:0;z-index:30;background:rgba(20,28,24,.45);display:flex;align-items:stretch;justify-content:center}
+.tut{background:var(--bg);width:100%;max-width:520px;display:flex;flex-direction:column;gap:14px;padding:calc(18px + env(safe-area-inset-top,0px)) 18px calc(18px + env(safe-area-inset-bottom,0px));overflow:hidden}
+@media (min-width:700px){.tut-bg{align-items:center}.tut{border-radius:22px;max-height:88vh}}
+.tut-dots{display:flex;gap:5px}
+.tut-dots i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.tut-dots i.on{background:var(--green)}
+.tut-body{flex:1;overflow:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:6px}
+.tut-ic{width:54px;height:54px;border-radius:16px;background:var(--sage);color:var(--green);display:grid;place-items:center}
+.tut-ic svg{width:28px;height:28px}
+.tut h2{font-size:26px;line-height:1.2}
+.tut-d{margin:0;font-size:16px;color:var(--ink)}
+.tut-steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:9px;font-size:15px}
+.tut-steps li::marker{font-weight:700;color:var(--green)}
+.tut-demo{background:var(--surface);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.tut-fab{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--green);color:#fff;vertical-align:-6px}
+.tut-fab svg{width:15px;height:15px}
 /* Auth & test (pantallas completas de marca) */
 .brand-page{min-height:100%;display:flex;flex-direction:column;align-items:center;padding:28px 16px 40px;background:linear-gradient(180deg,var(--sage) 0,var(--bg) 300px)}
 .brand-page .logos{justify-content:center;gap:18px;margin:10px 0 26px}
@@ -250,6 +270,7 @@ textarea.in{min-height:96px;resize:vertical;line-height:1.45}
 
 <div id="app"></div>
 <div id="sheet-root"></div>
+<div id="tut-root"></div>
 <div id="toast-root"></div>
 
 <script src="vendor/tesseract.min.js"></script>
@@ -601,8 +622,7 @@ function ficha(c){
       <input type="range" min="0" max="100" step="5" value="${c.temp}" id="temp" aria-label="Termómetro de cierre de 0 a 100" data-id="${c.id}">
       <div class="row muted small" style="justify-content:space-between"><span>❄️ Frío</span><span>Caliente 🔥</span></div></div></section>
   <section class="card"><span class="eyebrow">Ancla de memoria</span><p class="muted small" style="margin:0">¿Qué dijo o qué lo hizo especial? Úsalo para personalizar cada mensaje.</p>
-    <textarea class="in" id="ancla" data-id="${c.id}" placeholder="Ej.: tiene manchas que le acomplejan, se casa en marzo…">${esc(c.ancla)}</textarea>
-    <div class="chips">${ANCLA_TIPS.map(t=>`<button class="chip" data-act="tip" data-id="${c.id}" data-t="${esc(t)}">+ ${esc(t)}</button>`).join('')}</div></section>
+    <textarea class="in" id="ancla" data-id="${c.id}" placeholder="Por ejemplo:&#10;• Le preocupa una zona de su piel&#10;• Tiene un evento importante pronto&#10;• Busca un ingreso extra&#10;• Lo tiene que conversar con su pareja">${esc(c.ancla)}</textarea></section>
   <section class="card"><span class="eyebrow">Objeción</span>
     <div class="chips">${OBJ.map(o=>`<button class="chip${c.obj===o.k?' on':''}" data-act="obj" data-id="${c.id}" data-v="${o.k}">${esc(o.n)}</button>`).join('')}</div>
     <input class="in" id="objf" data-id="${c.id}" placeholder="Frase literal que dijo (opcional)" value="${esc(c.objFrase)}">
@@ -628,7 +648,7 @@ function stepCard(c,st,s){
   const reconnect = s==='reconnect';
   const tpl = reconnect ? RECONNECT : st.msg;
   const msgBox = tpl ? `<label class="f">Mensaje (puedes editarlo)<textarea class="in" id="msg" data-id="${c.id}">${esc(fill(tpl,c))}</textarea></label>
-     <div class="row"><a class="btn wa" id="wa" href="${esc(waHref(c,fill(tpl,c)))}" target="_blank" rel="noopener" data-act="sent" data-id="${c.id}" data-re="${reconnect?1:0}">${IC.wa}${reconnect?'Enviar reconexión':'Enviar por WhatsApp'}</a><button class="btn ghost" data-act="copymsg">${IC.copy}Copiar</button></div>` : '';
+     <div class="btn-pair"><a class="btn wa" id="wa" href="${esc(waHref(c,fill(tpl,c)))}" target="_blank" rel="noopener" data-act="sent" data-id="${c.id}" data-re="${reconnect?1:0}">${IC.wa}WhatsApp</a><button class="btn ghost" data-act="copymsg">${IC.copy}Copiar</button></div>` : '';
   let body='';
   if(st.instr) body+=`<div class="instr"><b>Qué hacer:</b> ${esc(st.instr)}${c.tipo==='cliente'&&c.paso===1?` <a href="${esc(S.links.academia)}" target="_blank" rel="noopener">Abrir Academia K-WAM</a>`:''}</div>`;
   if(st.kind==='test') body+=`<div class="instr">El prospecto responde 7 preguntas desde su celular. Al terminar, su tipo de piel aparece aquí y queda listo el paso 4.</div><button class="btn soft" data-act="test" data-id="${c.id}">Ver el test como lo ve ${esc(c.nombre.split(' ')[0])}</button>`;
@@ -681,6 +701,7 @@ function viewObjeciones(){
 function viewAjustes(){
   const u=S.user;
   return `<h1 class="display" style="font-size:26px">Ajustes</h1>
+  <section class="card tint"><span class="eyebrow">¿Cómo se usa?</span><p class="small" style="margin:0">Repasa paso a paso cómo usar la app y cómo instalarla en tu celular.</p><button class="btn" data-act="tutopen">Ver tutorial</button></section>
   <section class="card"><span class="eyebrow">Mi cuenta</span>
     <div class="row" style="gap:8px"><label class="f" style="flex:1 1 160px">Nombre<input class="in" id="u_n" value="${esc(u.nombre)}"></label><label class="f" style="flex:1 1 160px">Apellido<input class="in" id="u_a" value="${esc(u.apellido||'')}"></label></div>
     <label class="f">País<select class="in" id="u_p">${countryOptions(u.pais)}</select></label>
@@ -866,6 +887,72 @@ async function handleShots(files){
   OCR_CB=null;
 }
 
+
+/* ============ Tutorial ============ */
+let TUT=null, INSTALL_PROMPT=null;
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); INSTALL_PROMPT=e; if(TUT!==null) renderTut(); });
+const isIOS=()=>/iPhone|iPad|iPod/i.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);
+const isStandalone=()=>{ try{ return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true; }catch(e){ return false; } };
+const tutKey=()=>'tut_'+((S.user&&S.user.email)||'x');
+function maybeTutorial(){ if(S.user && !store.get(tutKey(),false)) openTut(); }
+function openTut(i=0){ TUT={i,os:isIOS()?'ios':'android'}; renderTut(); }
+function closeTut(){ store.set(tutKey(),true); TUT=null; $('#tut-root').innerHTML=''; }
+const SHARE_IC='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M8 10H6.5A2.5 2.5 0 0 0 4 12.5v6A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-6A2.5 2.5 0 0 0 17.5 10H16"/></svg>';
+function tutSlides(){
+  const n=S.user?S.user.nombre:'';
+  const inst = isStandalone()
+    ? `<div class="okb">✓ ¡Ya tienes la app instalada en tu celular!</div>`
+    : `<div class="seg" style="margin-bottom:4px"><button class="${TUT.os==='ios'?'on':''}" data-act="tutos" data-v="ios">iPhone</button><button class="${TUT.os==='android'?'on':''}" data-act="tutos" data-v="android">Android</button></div>
+      ${TUT.os==='ios'?`<ol class="tut-steps">
+        <li>Abre este link en <b>Safari</b> (el navegador de la brújula). Si estás en otro, copia el link y pégalo en Safari.</li>
+        <li>Toca el botón <b>Compartir</b> ${SHARE_IC} (el cuadrado con una flecha hacia arriba). Si no lo ves, toca primero los tres puntos <b>···</b>.</li>
+        <li>Baja y toca <b>"Agregar a pantalla de inicio"</b>.</li>
+        <li>Toca <b>"Agregar"</b> arriba a la derecha. ¡Listo! Busca el ícono verde de RIMAN en tu pantalla.</li></ol>`
+      :`${INSTALL_PROMPT?`<button class="btn block" data-act="tutinstall">Instalar ahora</button><p class="muted small" style="margin:0;text-align:center">O hazlo a mano:</p>`:''}<ol class="tut-steps">
+        <li>Abre este link en <b>Chrome</b>.</li>
+        <li>Toca los tres puntos <b>⋮</b> arriba a la derecha.</li>
+        <li>Toca <b>"Instalar app"</b> o <b>"Agregar a pantalla principal"</b>.</li>
+        <li>Confirma con <b>"Instalar"</b>. ¡Listo! Busca el ícono verde de RIMAN en tu pantalla.</li></ol>`}`;
+  return [
+    {ic:IC.check,t:`Bienvenido${n?', '+esc(n):''}`,d:'Esta app te dice <b>a quién hacerle seguimiento cada día y qué enviarle</b>, para que ningún prospecto se te enfríe después de una presentación. En 2 minutos aprendes a usarla.',
+      body:`<div class="tut-demo"><div class="logos" style="justify-content:center"><span class="logo riman" style="height:20px"></span><span class="sep"></span><span class="logo kwam" style="height:13px"></span></div></div>`},
+    {ic:IC.plus,t:'Déjala como app en tu celular',d:'Así la abres con un toque, igual que WhatsApp. No necesitas descargar nada de ninguna tienda.',body:inst},
+    {ic:IC.cam,t:'Agrega un prospecto con una captura',d:'Después de cada presentación, agrega a la persona. No tienes que escribir nada.',
+      body:`<div class="guide"><div class="phone-mini" aria-hidden="true"><i></i><b></b><s></s></div><ol class="tut-steps" style="margin:0">
+        <li>En WhatsApp, abre el chat y <b>toca el nombre arriba</b>.</li><li>Saca <b>captura de pantalla</b> donde se ve el número.</li></ol></div>
+        <ol class="tut-steps" start="3"><li>En esta app toca el botón <span class="tut-fab">${IC.plus}</span> <b>Agregar</b>.</li><li>Toca <b>"Subir captura de WhatsApp"</b> y elige la captura.</li><li>Revisa nombre y número, elige <b>Cliente</b> o <b>Planner</b> y toca <b>Guardar</b>.</li></ol>
+        <div class="warn small">Si te avisa que <b>falta el nombre</b>, guarda primero el contacto en tu teléfono con su nombre y vuelve a sacar la captura.</div>`},
+    {ic:IC.hoy,t:'Cada día, abre "Hoy"',d:'Es tu lista de tareas del día. Hazlas de arriba hacia abajo.',
+      body:`<div class="tut-demo"><div class="task" style="pointer-events:none"><div class="th" style="display:flex;gap:12px;align-items:center;padding:12px"><span class="cnt">3</span><span class="tt"><b>Enviar: Película de RIMAN</b><span>Clientes · paso 2</span></span></div></div>
+        <div class="task" style="pointer-events:none"><div class="th" style="display:flex;gap:12px;align-items:center;padding:12px"><span class="cnt q">2</span><span class="tt"><b>¿Te respondieron?</b><span>Un toque por persona</span></span></div></div></div>
+        <ol class="tut-steps"><li>Toca una tarea para ver a quiénes les toca.</li><li>Cuando te pregunte <b>"¿Te respondieron?"</b>, contesta con un toque: <b>Sí</b> avanza al siguiente paso, <b>Aún no</b> te lo recuerda en 2 días.</li><li>El aviso 🔥 te muestra a los que están listos para cerrar.</li></ol>`},
+    {ic:IC.wa,t:'Envía cada paso por WhatsApp',d:'Al abrir un prospecto, la app ya tiene el mensaje escrito para el paso que le toca.',
+      body:`<div class="tut-demo" style="pointer-events:none"><div class="btn-pair"><span class="btn wa">${IC.wa}WhatsApp</span><span class="btn ghost">${IC.copy}Copiar</span></div></div>
+        <ol class="tut-steps"><li>Revisa el mensaje. Puedes cambiarlo si quieres.</li><li>Toca <b>WhatsApp</b>: se abre el chat con el mensaje listo. Solo presiona enviar.</li><li>Si el paso dice <b>"Qué hacer"</b>, sigue esa instrucción antes de enviar.</li></ol>`},
+    {ic:IC.pen,t:'Anota lo que sientes y lo que dijo',d:'Dentro de cada prospecto tienes tres herramientas para no olvidar nada.',
+      body:`<ol class="tut-steps"><li><b>Termómetro:</b> mueve la barra de frío a caliente según cuántas ganas le ves. Desde 80% la app te sugiere ir directo al cierre.</li>
+        <li><b>Ancla de memoria:</b> escribe algo especial que te contó. La app te lo recuerda cada vez que le escribas.</li>
+        <li><b>Objeción:</b> marca qué lo frena (dinero, tiempo, pareja…) y la app te muestra una respuesta para copiar.</li></ol>
+        <div class="tut-demo" style="pointer-events:none"><div class="thermo"><input type="range" value="80" tabindex="-1" aria-hidden="true"></div></div>`},
+    {ic:IC.embudo,t:'Mira tu embudo y empuja',d:'En <b>Embudo</b> ves cuántas personas tienes en cada paso. Tu meta es moverlas hacia el cierre.',
+      body:`<div class="tut-demo" style="pointer-events:none"><div class="funnel">${[['Testimonio',8],['Película RIMAN',6],['Test de piel',4],['Recomendación',3],['Zoom de cierre',2]].map((r,i)=>`<div class="fr"><span class="n num">${i+1}</span><span class="bw"><span class="bl">${r[0]}</span><span class="bar"><i style="width:${r[1]/8*100}%;${i===4?'background:var(--green)':''}"></i></span></span><span class="c num">${r[1]}</span></div>`).join('')}</div></div>
+        <ol class="tut-steps"><li>Toca un paso para ver quiénes están ahí.</li><li>Usa <b>Avanzar →</b> cuando ya hiciste ese paso con la persona.</li></ol>`},
+    {ic:IC.check,t:'¡Listo para empezar!',d:'El secreto es simple: <b>abre la app todos los días y completa tus tareas de "Hoy"</b>. El seguimiento es donde se cierran los negocios.',
+      body:`<div class="okb">Puedes volver a ver este tutorial cuando quieras en <b>Ajustes → Ver tutorial</b>.</div>`}
+  ];
+}
+function renderTut(){
+  if(TUT===null) return;
+  const sl=tutSlides(), i=TUT.i, s=sl[i], last=i===sl.length-1;
+  $('#tut-root').innerHTML=`<div class="tut-bg"><div class="tut" role="dialog" aria-modal="true" aria-label="Tutorial">
+    <div class="row" style="justify-content:space-between"><span class="eyebrow">Tutorial · ${i+1} de ${sl.length}</span>${last?'':'<button class="linkbtn small" data-act="tutclose">Saltar</button>'}</div>
+    <div class="tut-dots">${sl.map((_,k)=>`<i class="${k<=i?'on':''}"></i>`).join('')}</div>
+    <div class="tut-body"><span class="tut-ic">${s.ic}</span><h2 class="display">${s.t}</h2><p class="tut-d">${s.d}</p>${s.body}</div>
+    <div class="btn-pair" style="margin-top:auto">${i>0?'<button class="btn ghost" data-act="tutprev">Atrás</button>':'<span></span>'}<button class="btn" data-act="${last?'tutclose':'tutnext'}">${last?'Empezar':'Siguiente'}</button></div>
+  </div></div>`;
+  const b=document.querySelector('.tut-body'); if(b) b.scrollTop=0;
+}
+
 /* ============ Eventos ============ */
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]'); if(!el) return;
@@ -938,8 +1025,14 @@ document.addEventListener('click',e=>{
     case 'reseed': S.contacts=S.contacts.filter(c=>!c.ej).concat(seed()); save(); toast('Ejemplos restaurados'); render(); return;
     case 'logout': S.user=null; save(); AUTH='login'; render(); return;
     case 'pw': { const inp=el.parentElement.querySelector('input'); const show=inp.type==='password'; inp.type=show?'text':'password'; el.classList.toggle('on',show); el.setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña'); inp.focus(); return; }
+    case 'tutopen': openTut(0); return;
+    case 'tutnext': TUT.i++; renderTut(); return;
+    case 'tutprev': TUT.i=Math.max(0,TUT.i-1); renderTut(); return;
+    case 'tutclose': closeTut(); return;
+    case 'tutos': TUT.os=el.dataset.v; renderTut(); return;
+    case 'tutinstall': if(INSTALL_PROMPT){ INSTALL_PROMPT.prompt(); INSTALL_PROMPT.userChoice.finally(()=>{ INSTALL_PROMPT=null; renderTut(); }); } return;
     case 'auth': AUTH=el.dataset.v; render(); return;
-    case 'demo': S.user={nombre:'Gonzalo',apellido:'Águila',email:'demo@mastermind',pais:'CL'}; save(); S.view='hoy'; render(); warmLater(); return;
+    case 'demo': S.user={nombre:'Gonzalo',apellido:'Águila',email:'demo@mastermind',pais:'CL'}; save(); S.view='hoy'; render(); warmLater(); maybeTutorial(); return;
   }
 });
 document.addEventListener('submit',e=>{
@@ -947,11 +1040,11 @@ document.addEventListener('submit',e=>{
   const f=e.target.id;
   if(f==='f_login'){ const em=$('#a_e').value.trim(); const saved=store.get('account',null);
     if(saved&&saved.email===em){ S.user=saved; } else { S.user={nombre:em.split('@')[0].replace(/^./,x=>x.toUpperCase()),apellido:'',email:em,pais:'CL'}; }
-    save(); S.view='hoy'; render(); warmLater(); }
+    save(); S.view='hoy'; render(); warmLater(); maybeTutorial(); }
   if(f==='f_reg'){ const k=$('#r_k').value.trim().toUpperCase();
     if(k!=='MASTERMIND'){ $('#r_err').innerHTML='<div class="err">El código de equipo no es válido. Pídeselo a tu líder.</div>'; return; }
     S.user={nombre:$('#r_n').value.trim(),apellido:$('#r_a').value.trim(),email:$('#r_e').value.trim(),pais:$('#r_c').value};
-    store.set('account',S.user); save(); S.view='hoy'; render(); toast('¡Bienvenido, '+S.user.nombre+'!'); warmLater(); }
+    store.set('account',S.user); save(); S.view='hoy'; render(); warmLater(); maybeTutorial(); }
   if(f==='f_forgot'){ $('#fg_ok').innerHTML='<div class="okb">Si el correo está registrado, te llegará un link para crear una contraseña nueva. Revisa también tu carpeta de spam.</div>'; }
 });
 document.addEventListener('input',e=>{
@@ -968,7 +1061,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='temp'){ const c=byId(e.target.dataset.id); log(c,'Termómetro en '+c.temp+'%'); save(); render(); }
   if(e.target.id==='shot' && e.target.files.length) handleShots(e.target.files);
 });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(TUT!==null) closeTut(); else closeSheet(); } });
 
 function finishQuiz(){
   const c=byId(S.testFor); if(!c) return;
@@ -996,7 +1089,7 @@ addEventListener('resize',()=>{ const w=matchMedia('(min-width:900px)').matches;
   const m=location.hash.match(/^#test-(\w+)$/); if(m&&S.user&&byId(m[1])){ S.testFor=m[1]; }
 })();
 if(S.testOnly) renderTest(); else render();
-if(S.user&&!S.testOnly) warmLater();
+if(S.user&&!S.testOnly){ warmLater(); maybeTutorial(); }
 </script>
 
 </body>
