@@ -919,6 +919,27 @@ function normPhone(raw){
   return '+'+home+s.replace(/^0+/,'');
 }
 const UI_WORDS=/^(info|información|editar|buscar|audio|video|videollamada|llamar|llamada|pagar|notificaciones|multimedia|archivos|enlaces|docs|documentos|mensajes|temporales|cifrado|bloquear|reportar|denunciar|añadir|agregar|contacto|contactos|grupos|en común|visibilidad|favoritos|cancelar|compartir|ver todo|todo|hoy|ayer|en línea|escribiendo|última vez|estado|crear|nuevo|existente|guardar|privacidad|whatsapp|business|cuenta|empresa|empresarial|catálogo|chats|llamadas|novedades|comunidades|ajustes|silenciar|vaciar|exportar|elementos|destacados|mensajes destacados|seguridad|conexión|bloqueo|tema|fondo|añadir a favoritos|search|edit|mute|call|voice|share|add|block|report|contact info|disappearing messages|encryption|media|links)[\s.:]*$/i;
+const NAME_BAD=/(info\.?|datos|detalles) del contacto|contact info|editar|perfil|whatsapp|en l[ií]nea|escribiendo|[uú]ltima vez/i;
+const PARTICLES=/^(de|del|la|las|los|y|da|das|do|dos|van|von|di|le)$/;
+function cleanName(line){
+  if(!line) return '';
+  const raw=line.replace(/^~\s*/,'').replace(/[^\p{L}\s'.-]/gu,' ').replace(/\s+/g,' ').trim();
+  if(!raw || UI_WORDS.test(raw) || NAME_BAD.test(line)) return '';
+  const toks=raw.split(' ');
+  const ok=t=>/^[A-ZÁÉÍÓÚÑÜ][a-záéíóúñüA-ZÁÉÍÓÚÑÜ]*(['-][A-Za-zÁÉÍÓÚÑÜáéíóúñü]+)?\.?$/.test(t) && (t.length>=2 || /^[A-ZÁÉÍÓÚÑ]\.$/.test(t));
+  // recorta basura al inicio y al final (restos de la foto), conserva el bloque central
+  let a=0,b=toks.length-1;
+  while(a<=b && !ok(toks[a])) a++;
+  while(b>=a && !ok(toks[b])) b--;
+  if(a>b) return '';
+  const core=toks.slice(a,b+1).filter(t=>ok(t)||PARTICLES.test(t));
+  const name=core.join(' ').trim();
+  const letters=(raw.match(/\p{L}/gu)||[]).length, kept=(name.match(/\p{L}/gu)||[]).length;
+  if(kept<3 || kept<letters*0.5 || core.length>5 || UI_WORDS.test(name)) return '';
+  // evita "nombres" de una letra repetida o sin vocales (ruido)
+  if(!/[aeiouáéíóúAEIOUÁÉÍÓÚyY]/.test(name)) return '';
+  return name;
+}
 function parseOCR(text){
   const lines=text.split(/\n/).map(l=>l.replace(/[|•·©®]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
   let telIdx=-1, tel='';
@@ -933,14 +954,32 @@ function parseOCR(text){
   let sug=''; const tl=lines.find(l=>/^~\s*\S/.test(l)); if(tl) sug=tl.replace(/^~\s*/,'').trim();
   let nombre='';
   if(telIdx>=0){
-    for(let k=telIdx-1;k>=Math.max(0,telIdx-3);k--){ const l=lines[k]; if(isName(l)&&!l.startsWith('~')){ nombre=l; break; } }
+    for(let k=telIdx-1;k>=Math.max(0,telIdx-3);k--){ const l=lines[k]; if(l.startsWith('~')) continue; const n=cleanName(l); if(n){ nombre=n; break; } }
+    // nombre pegado en la misma línea que el número
+    if(!nombre){ const same=cleanName(lines[telIdx].replace(/\+?\(?\d[\d\s().-]{6,}\d/g,' ')); if(same) nombre=same; }
     // si el título es el propio número (contacto no guardado), no hay nombre
     if(nombre && lines.slice(Math.max(0,telIdx-1),telIdx+1).some(l=>l.startsWith('~'))) nombre='';
   } else {
-    const n=lines.find(l=>isName(l)&&!l.startsWith('~')&&l.split(' ').length<=4);
-    if(n) nombre=n;
+    for(const l of lines){ if(l.startsWith('~')) continue; const n=cleanName(l); if(n && n.split(' ').length<=4){ nombre=n; break; } }
   }
   return {nombre:nombre.replace(/[^\p{L}\s'.-]/gu,'').trim(),tel,sug};
+}
+async function nameNearPhone(canvas,lines,tel){
+  const digits=tel.replace(/\D/g,'').slice(-8);
+  const pl=lines.find(l=>(l.text||'').replace(/\D/g,'').includes(digits));
+  if(!pl||!pl.bbox) return '';
+  const h=Math.max(20,pl.bbox.y1-pl.bbox.y0), top=Math.max(0,pl.bbox.y0-h*6);
+  const rect={left:0,top:Math.round(top),width:canvas.width,height:Math.max(10,Math.round(pl.bbox.y0-top))};
+  const inv=document.createElement('canvas'); inv.width=canvas.width; inv.height=canvas.height;
+  const g=inv.getContext('2d'); g.filter='grayscale(1) invert(1) contrast(1.6)'; g.drawImage(canvas,0,0);
+  const gray=document.createElement('canvas'); gray.width=canvas.width; gray.height=canvas.height;
+  const g2=gray.getContext('2d'); g2.filter='grayscale(1) contrast(1.8)'; g2.drawImage(canvas,0,0);
+  for(const src of [gray,inv]){
+    const r=await ocrWorker.recognize(src,{rectangle:rect});
+    const L=(r.data.text||'').split('\n').map(x=>x.trim()).filter(Boolean);
+    for(let i=L.length-1;i>=0;i--){ if(L[i].startsWith('~')) continue; const n=cleanName(L[i]); if(n) return n; }
+  }
+  return '';
 }
 let ocrWorker=null, ocrWarm=null;
 function warmOCR(){
@@ -977,7 +1016,13 @@ async function handleShots(files){
       OCR_CB=p=>{ it.p=p; const bar=document.querySelectorAll('.sheet .progress i')[0]; if(bar) bar.style.width=Math.round(p*100)+'%'; };
       await warmOCR();
       const r=await ocrWorker.recognize(canvas);
-      Object.assign(it,parseOCR(r.data.text||''));
+      const good=(r.data.lines||[]).filter(l=>l.confidence>=45 || /\d{6,}/.test((l.text||'').replace(/\D/g,'')));
+      let res=parseOCR(good.length?good.map(l=>l.text).join('\n'):(r.data.text||''));
+      const res2=parseOCR(r.data.text||'');
+      if(!res.tel && res2.tel) res=Object.assign({},res2,{nombre:res.nombre||res2.nombre});
+      if(!res.nombre && res2.nombre) res.nombre=res2.nombre;
+      if(res.tel && !res.nombre){ try{ res.nombre=await nameNearPhone(canvas,r.data.lines||[],res.tel); }catch(e){} }
+      Object.assign(it,res);
     }catch(e){ it.ocrFail=true; }
     it.busy=false; if(!NEW) return; renderSheet();
   }
