@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Mastermind">
+<meta property="og:title" content="RIMAN · Equipo Mastermind">
+<meta property="og:description" content="Descubre tu tipo de piel en 1 minuto.">
+<meta name="description" content="Descubre tu tipo de piel en 1 minuto.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="img/icon-180.png">
 <link rel="icon" href="img/icon-192.png">
@@ -382,7 +385,7 @@ const SEQ = {
      instr:'Entra a la Academia K-WAM y busca los testimonios de la línea ICD. Si necesitas más, revisa el canal de testimonios. Adjunta el testimonio en el chat junto a este mensaje.',
      msg:'Hola {n} 😊 Te comparto el testimonio de una clienta que usa la línea ICD de RIMAN. ¡Mira sus resultados y me cuentas qué te parece!'},
     {t:'Película de RIMAN',kind:'send',msg:'Hola {n}, te comparto la película de RIMAN. Son unos minutos y vas a entender por qué es una marca tan exclusiva en Corea: {pelicula}'},
-    {t:'Test de piel',kind:'test',msg:'Hola {n}, para recomendarte la rutina ideal preparé un test corto sobre tu piel. Son 7 preguntas y te toma un minuto: {test}'},
+    {t:'Test de piel',kind:'test',msg:'Hola {n}, ¿cómo estás? Para recomendarte la rutina ideal preparé un test corto sobre tu piel.\n\nSon 7 preguntas y te toma un minuto:\n\n{test}\n\nComplétalo y tendremos una rutina ideal para ti, ¿te parece?'},
     {t:'Recomendación de rutina',kind:'reco',msg:'Hola {n}, según tu test, esta es la rutina que te recomiendo para tu piel ({piel}). Si te interesa, te muestro cómo usarla y qué resultados puedes esperar. ¿Me das 10 minutos por Zoom?'},
     {t:'Zoom de 10 minutos',kind:'zoom',cierre:true,msg:'¡Listo, {n}! Nos vemos el {fecha} a las {hora} por Zoom. Te muestro tu rutina, cómo usarla y los resultados que puedes esperar. {zoom}'},
     {t:'Objeción real',kind:'obj',msg:''},
@@ -546,6 +549,11 @@ function status(c){
 }
 const isClosingMeeting = c => { const st=step(c); return isLive(st) && (st.cierre || c.paso>=7); };
 /* Avanza solo: reuniones ya realizadas y datos de la versión anterior */
+function shortCode(){
+  const A='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'; let r='';
+  try{ const b=crypto.getRandomValues(new Uint8Array(7)); b.forEach(x=>r+=A[x%A.length]); }catch(e){ for(let i=0;i<7;i++) r+=A[Math.floor(Math.random()*A.length)]; }
+  return r;
+}
 function autoAdvance(){
   let changed=false;
   S.contacts.forEach(c=>{
@@ -584,7 +592,11 @@ function markSent(c,reconnect){
 }
 function fill(tpl,c,extra={}){
   const ag=c.agenda||{};
-  const testLink = location.href.split('#')[0].split('?')[0]+'?test='+c.id+'&n='+encodeURIComponent(c.nombre.split(' ')[0]);
+  if(!c.tc){ c.tc=shortCode(); setTimeout(save,0); }
+  let base=(S.links.testurl||'').trim();
+  if(!/^https?:\/\//i.test(base)) base=location.href.split('#')[0].split('?')[0];
+  else base=base.split('#')[0].split('?')[0].replace(/\/?$/,'/');
+  const testLink = base+'?t='+c.tc;
   return tpl.replace(/\{(\w+)\}/g,(m,k)=>{
     if(k==='n') return c.nombre.split(' ')[0];
     if(k==='piel') return c.piel?SKIN[c.piel].n.toLowerCase():'tu tipo de piel';
@@ -836,7 +848,7 @@ function viewAjustes(){
     <label class="f">País<select class="in" id="u_p">${countryOptions(u.pais)}</select></label>
     <button class="btn" data-act="saveuser">Guardar</button></section>
   ${(S.mode==='demo'||u.admin)?`<section class="card"><span class="eyebrow">Panel de administrador</span><p class="muted small" style="margin:0">${S.mode==='demo'?'En la cuenta de ejemplo los cambios quedan solo en este celular.':'Solo tú ves esta sección. Lo que cambies aquí le llega a todo el equipo.'}</p>
-    ${[['kiyosaki','Planner · paso 1 · Video Kiyosaki'],['pelicula','Clientes · paso 2 · Película de RIMAN'],['academia','Academia K-WAM (testimonios y masterclass)'],['lesbrown','Planner · paso 6 · Video Les Brown']].map(([k,l])=>`<label class="f">${l}<input class="in" id="l_${k}" value="${esc(S.links[k])}"></label>`).join('')}
+    ${[['kiyosaki','Planner · paso 1 · Video Kiyosaki'],['pelicula','Clientes · paso 2 · Película de RIMAN'],['academia','Academia K-WAM (testimonios y masterclass)'],['lesbrown','Planner · paso 6 · Video Les Brown'],['testurl','Dirección del test de piel (ej.: https://testdepiel.github.io/)']].map(([k,l])=>`<label class="f">${l}<input class="in" id="l_${k}" value="${esc(S.links[k]||'')}"${k==='testurl'?' placeholder="Vacío = usa la dirección de esta app"':''}></label>`).join('')}
     <button class="btn" data-act="savelinks">Guardar links</button></section>`:''}
   ${S.mode==='demo'?`<section class="card tint"><span class="eyebrow">Cuenta de ejemplo</span><p class="small" style="margin:0">Estás probando con datos de ejemplo que se guardan solo en este celular. Para usar la app de verdad, cierra sesión y crea tu cuenta.</p>
     <div class="row"><button class="btn sm ghost" data-act="cleardemo">Borrar ejemplos</button><button class="btn sm ghost" data-act="reseed">Restaurar ejemplos</button></div></section>`
@@ -1209,7 +1221,7 @@ document.addEventListener('click',e=>{
       else toast('Guardado');
       render(); return; }
     case 'savelinks': {
-      const nl=Object.assign({},S.links); ['kiyosaki','pelicula','academia','lesbrown'].forEach(k=>{ const v=$('#l_'+k).value.trim(); if(v) nl[k]=v; });
+      const nl=Object.assign({},S.links); ['kiyosaki','pelicula','academia','lesbrown'].forEach(k=>{ const v=$('#l_'+k).value.trim(); if(v) nl[k]=v; }); nl.testurl=$('#l_testurl').value.trim();
       if(S.mode==='cloud'&&sb){ sb.from('seg_ajustes').upsert({clave:'links',valor:nl}).then(({error})=>{ if(error) toast('No se pudieron guardar los links.'); else { S.links=nl; store.set('links',nl); toast('Links actualizados para todo el equipo'); } }); }
       else { S.links=nl; save(); toast('Links guardados en este celular'); }
       return; }
@@ -1287,7 +1299,8 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(TUT!==null) cl
 function finishQuiz(){
   if(S.testOnly){
     const piel=scoreQuiz(QZ.ans);
-    if(sb && isUUID(S.testFor)) sb.rpc('seg_guardar_test',{p_id:S.testFor,p_piel:piel}).then(({error})=>{ if(error) console.warn(error); });
+    if(sb && S.testCode) sb.rpc('seg_guardar_test_codigo',{p_code:S.testCode,p_piel:piel}).then(({error})=>{ if(error) console.warn(error); });
+    else if(sb && isUUID(S.testFor)) sb.rpc('seg_guardar_test',{p_id:S.testFor,p_piel:piel}).then(({error})=>{ if(error) console.warn(error); });
     return;
   }
   const c=byId(S.testFor); if(!c) return;
@@ -1311,6 +1324,9 @@ addEventListener('resize',()=>{ const w=matchMedia('(min-width:900px)').matches;
 /* Link del test: #test-<id> abre la vista del prospecto */
 (function(){
   let p; try{ p=new URLSearchParams(location.search); }catch(e){ p=null; }
+  if(p&&p.get('t')){ S.testCode=p.get('t').replace(/[^A-Za-z0-9]/g,'').slice(0,12); S.testFor='code'; S.testName=''; S.testOnly=true;
+    if(sb) sb.rpc('seg_test_nombre',{p_code:S.testCode}).then(({data})=>{ if(data&&typeof data==='string'){ S.testName=data; if(QZ.i===0||QZ.i>=QUIZ.length) renderTest(); } }).catch(()=>{});
+    return; }
   if(p&&p.get('test')){ S.testFor=p.get('test'); S.testName=p.get('n')||''; S.testOnly=true; return; }
   const m=location.hash.match(/^#test-(\w+)$/); if(m&&S.user&&byId(m[1])){ S.testFor=m[1]; }
 })();
