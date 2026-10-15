@@ -533,22 +533,54 @@ function status(c){
   const st=step(c);
   if(isLive(st) && c.agenda){
     if(c.agenda.fecha===TODAY) return {k:'meet'};
-    if(c.agenda.fecha<TODAY) return {k:'held'};
+    if(c.agenda.fecha<TODAY) return {k:'final'};   // solo queda pendiente si es de cierre (el resto avanza solo)
     return {k:'upcoming'};
   }
-  if(c.sent){
-    if(c.sent>=TODAY) return {k:'waiting'};
-    if(c.espera){ return c.espera<=TODAY ? {k:'reconnect'} : {k:'later'}; }
-    return {k:'ask'};
+  if(c.recon) return {k:'reconnect'};
+  if(st.kind==='test' && c.sent){
+    if(c.espera && c.espera<=TODAY) return {k:'reconnect'};
+    return {k:'testwait'};
   }
+  if(isLive(st) && c.sent) return {k:'todo'};
   return {k:'todo'};
+}
+const isClosingMeeting = c => { const st=step(c); return isLive(st) && (st.cierre || c.paso>=7); };
+/* Avanza solo: reuniones ya realizadas y datos de la versión anterior */
+function autoAdvance(){
+  let changed=false;
+  S.contacts.forEach(c=>{
+    if(c.estado!=='activo') return;
+    const st=step(c); if(!st) return;
+    // reunión que ya pasó (que no sea de cierre) → siguiente paso hoy
+    if(isLive(st) && c.agenda && c.agenda.fecha<TODAY && !isClosingMeeting(c)){
+      log(c,'Reunión realizada · avance automático'); advance(c,TODAY); changed=true; return;
+    }
+    // versión anterior: enviado esperando "¿respondió?"
+    if(!isLive(st) && st.kind!=='test' && c.sent && c.sent<TODAY){
+      if(c.espera){ c.recon=true; c.desde=c.espera>TODAY?c.espera:null; c.sent=null; c.espera=null; }
+      else { advance(c,TODAY); }
+      changed=true;
+    }
+  });
+  if(changed) save();
 }
 function hot(c){ return c.estado==='activo' && c.temp>=80 && c.paso<CIERRE[c.tipo]; }
 
-function advance(c){
+function advance(c,desde){
   if(c.paso>=7){ c.estado='cerrado'; log(c,'Marcado como cerrado'); toast(c.nombre.split(' ')[0]+' terminó la secuencia'); }
   else { c.paso++; log(c,'Avanzó al paso '+c.paso); }
-  c.sent=null; c.espera=null; c.agenda=null; c.desde=null;
+  c.sent=null; c.espera=null; c.agenda=null; c.recon=false;
+  c.desde = desde && desde>TODAY ? desde : null;
+}
+/* Al enviar un paso: avanza solo al siguiente, que aparece mañana en "Hoy" */
+function markSent(c,reconnect){
+  const st=step(c), nombre=c.nombre.split(' ')[0];
+  if(reconnect){ c.recon=false; c.sent=null; c.espera=null; c.desde=addDays(TODAY,1); log(c,'Mensaje de reconexión enviado'); toast('Listo. Mañana retomas el seguimiento con '+nombre); return; }
+  if(st.kind==='test'){ c.sent=TODAY; c.espera=addDays(TODAY,2); log(c,'Test de piel enviado'); toast('Cuando '+nombre+' responda el test, pasa sola al paso 4'); return; }
+  if(isLive(st)){ c.sent=TODAY; log(c,'Invitación enviada: '+fmtDate(c.agenda.fecha)+' '+c.agenda.hora); toast('Invitación enviada. Después de la reunión avanza sola'); return; }
+  log(c,'Paso '+c.paso+' enviado');
+  advance(c,addDays(TODAY,1));
+  toast('✓ Enviado. '+nombre+' pasó al paso '+c.paso+' (te toca mañana)');
 }
 function fill(tpl,c,extra={}){
   const ag=c.agenda||{};
@@ -573,6 +605,7 @@ function waHref(c,text){
 function render(){
   if(S.testOnly||(S.user&&S.testFor)) return renderTest();
   if(S.booting) return renderBoot();
+  if(S.user && S.contacts) autoAdvance();
   if(AUTH==='newpw') return renderAuth();
   if(!S.user) return renderAuth();
   const views={hoy:['Hoy',IC.hoy],embudo:['Embudo',IC.embudo],contactos:['Contactos',IC.contactos],objeciones:['Objeciones',IC.obj]};
@@ -618,19 +651,18 @@ function contactRow(c,extra=''){
 /* ---- Hoy ---- */
 function viewHoy(){
   const act=S.contacts.filter(c=>c.estado==='activo');
-  const groups={}, asks=[], recon=[], meets=[], held=[], upcoming=[];
+  const groups={}, finals=[], recon=[], meets=[], upcoming=[];
   act.forEach(c=>{
     const s=status(c).k;
     if(s==='todo'){ const st=step(c); const key=c.tipo+'|'+c.paso; (groups[key]=groups[key]||{c:c.tipo,p:c.paso,st,list:[]}).list.push(c); }
-    else if(s==='ask') asks.push(c);
+    else if(s==='final') finals.push(c);
     else if(s==='reconnect') recon.push(c);
     else if(s==='meet') meets.push(c);
-    else if(s==='held') held.push(c);
     else if(s==='upcoming') upcoming.push(c);
   });
   const hots=act.filter(hot);
   const gl=Object.values(groups).sort((a,b)=>a.c.localeCompare(b.c)||a.p-b.p);
-  const total=gl.reduce((n,g)=>n+g.list.length,0)+asks.length+recon.length+meets.length+held.length;
+  const total=gl.reduce((n,g)=>n+g.list.length,0)+finals.length+recon.length+meets.length;
   const verb = st => st.kind==='test'?'Enviar test de piel':isLive(st)?'Agendar: '+st.t:st.kind==='obj'?'Identificar objeción':st.kind==='reco'?'Enviar recomendación':'Enviar: '+st.t;
   const taskBlock=(id,cnt,cls,title,sub,body)=>{
     const open=S.open[id]; return `<div class="task"><button class="th" data-act="toggle" data-id="${id}" aria-expanded="${!!open}"><span class="cnt ${cls}">${cnt}</span><span class="tt"><b>${esc(title)}</b><span>${esc(sub)}</span></span><span class="muted" aria-hidden="true">${open?'▴':'▾'}</span></button>${open?`<div class="tb">${body}</div>`:''}</div>`;
@@ -640,14 +672,18 @@ function viewHoy(){
     <p class="muted" style="margin:4px 0 0">${total?`Hoy tienes <b class="num" style="color:var(--ink)">${total}</b> ${total===1?'acción':'acciones'} de seguimiento.`:'Estás al día. Agrega nuevos prospectos después de tus demostraciones.'}</p></section>`;
   if(hots.length) h+=`<div class="alert"><span style="font-size:20px" aria-hidden="true">🔥</span><div><b>${hots.length} ${hots.length===1?'prospecto caliente':'prospectos calientes'}</b> (80% o más). Podrías llevarlos directo al cierre.<div class="chips" style="margin-top:8px">${hots.map(c=>`<button class="chip" data-act="open" data-id="${c.id}">${esc(c.nombre.split(' ')[0])} · ${c.temp}%</button>`).join('')}</div></div></div>`;
   if(meets.length) h+=taskBlock('meet',meets.length,'','Reuniones de hoy','Revisa la ficha antes de conectarte',meets.map(c=>contactRow(c,`<span class="pill">${esc(c.agenda.hora)}</span>`)).join(''));
-  if(asks.length) h+=taskBlock('ask',asks.length,'q','¿Te respondieron?','Un toque por persona para saber qué sigue',asks.map(c=>`<div class="ask"><div class="row" style="justify-content:space-between"><b>${esc(c.nombre)}</b><span class="muted small">Paso ${c.paso} · enviado ${fmtDate(c.sent)}</span></div><div class="row"><button class="btn sm" data-act="resp" data-r="si" data-id="${c.id}">Sí respondió</button><button class="btn sm soft" data-act="resp" data-r="aun" data-id="${c.id}">Aún no</button><button class="btn sm ghost" data-act="resp" data-r="no" data-id="${c.id}">No le interesa</button></div></div>`).join(''));
-  if(held.length) h+=taskBlock('held',held.length,'q','¿Se realizó la reunión?','Confírmalo para avanzar',held.map(c=>`<div class="ask"><div class="row" style="justify-content:space-between"><b>${esc(c.nombre)}</b><span class="muted small">${esc(step(c).t)} · ${fmtDate(c.agenda.fecha)}</span></div><div class="row"><button class="btn sm" data-act="held" data-r="si" data-id="${c.id}">Sí, avanzar</button><button class="btn sm soft" data-act="held" data-r="re" data-id="${c.id}">Reagendar</button></div></div>`).join(''));
-  if(recon.length) h+=taskBlock('recon',recon.length,'r','Reconectar','No respondieron hace 2 días: un mensaje suave',recon.map(c=>contactRow(c)).join(''));
+  if(finals.length) h+=taskBlock('final',finals.length,'q','¿Cerraste?','Reuniones de cierre que ya se hicieron',finals.map(c=>finalAsk(c)).join(''));
+  if(recon.length) h+=taskBlock('recon',recon.length,'r','Reconectar','No han respondido: un mensaje suave',recon.map(c=>contactRow(c)).join(''));
   gl.forEach(g=>{ const id='g'+g.c+g.p; h+=taskBlock(id,g.list.length,'',verb(g.st),(g.c==='cliente'?'Clientes':'Planners')+' · paso '+g.p+(g.st.cierre?' · cierre':''),g.list.map(c=>contactRow(c)).join('')); });
   if(upcoming.length) h+=`<section class="card tint"><div class="sec-h"><h2>Próximas reuniones</h2></div>${upcoming.sort((a,b)=>a.agenda.fecha.localeCompare(b.agenda.fecha)).map(c=>`<div class="row" style="justify-content:space-between"><span>${esc(c.nombre)} <span class="muted small">· ${esc(step(c).t)}</span></span><span class="pill num">${fmtDate(c.agenda.fecha)} ${esc(c.agenda.hora)}</span></div>`).join('')}</section>`;
   return h;
 }
 
+function finalAsk(c){
+  const st=step(c), last=c.paso>=7;
+  return `<div class="ask"><div class="row" style="justify-content:space-between"><b>${esc(c.nombre)}</b><span class="muted small">${esc(st.t)} · ${fmtDate(c.agenda.fecha)}</span></div>
+    <div class="row"><button class="btn sm" data-act="fin" data-r="si" data-id="${c.id}">Sí, cerró ✓</button><button class="btn sm soft" data-act="fin" data-r="no" data-id="${c.id}">${last?'No cerró':'No, ver objeción'}</button><button class="btn sm ghost" data-act="fin" data-r="re" data-id="${c.id}">No se hizo</button></div></div>`;
+}
 /* ---- Embudo ---- */
 function viewEmbudo(){
   const t=S.tipoTab, list=S.contacts.filter(c=>c.tipo===t);
@@ -731,15 +767,17 @@ function ficha(c){
 function stepCard(c,st,s){
   const ancla = c.ancla?`<div class="anchor-note"><b>Recuerda:</b> ${esc(c.ancla)}</div>`:'';
   let state='';
-  if(s==='later'&&c.desde) state=`<div class="okb">Siguiente acción disponible el ${fmtDate(c.desde)}.</div>`;
-  if(s==='waiting') state=`<div class="okb">Enviado hoy. Mañana te preguntaré si respondió.</div>`;
-  if(s==='ask') state=`<div class="warn"><b>¿${esc(c.nombre.split(' ')[0])} respondió?</b><div class="row" style="margin-top:8px"><button class="btn sm" data-act="resp" data-r="si" data-id="${c.id}">Sí</button><button class="btn sm soft" data-act="resp" data-r="aun" data-id="${c.id}">Aún no</button><button class="btn sm ghost" data-act="resp" data-r="no" data-id="${c.id}">No le interesa</button></div></div>`;
-  if(s==='later'&&c.espera) state=`<div class="okb">Esperando respuesta. Te recordaré reconectar el ${fmtDate(c.espera)}.</div>`;
-  if(s==='held') state=`<div class="warn"><b>¿Se realizó la reunión del ${fmtDate(c.agenda.fecha)}?</b><div class="row" style="margin-top:8px"><button class="btn sm" data-act="held" data-r="si" data-id="${c.id}">Sí, avanzar</button><button class="btn sm soft" data-act="held" data-r="re" data-id="${c.id}">Reagendar</button></div></div>`;
+  const nm=esc(c.nombre.split(' ')[0]);
+  if(s==='later'&&c.desde) state=`<div class="okb">✓ Paso anterior enviado. Este paso te toca el <b>${fmtDate(c.desde)}</b>. Si quieres adelantarlo, puedes enviarlo hoy.</div>`;
+  if(s==='testwait') state=`<div class="okb">Test enviado. Cuando ${nm} lo responda, pasa sola al paso 4. Si no responde, te recordaré el ${fmtDate(c.espera)}.</div>`;
+  if(s==='final') state=`<div class="warn"><b>¿Cerraste con ${nm} en la reunión del ${fmtDate(c.agenda.fecha)}?</b></div>${finalAsk(c)}`;
+  if(s==='todo' && !isLive(st) && st.kind!=='test' && st.kind!=='obj' && c.paso>1) state=`<div class="row small" style="justify-content:space-between;gap:8px"><span class="muted">¿${nm} no ha respondido lo anterior?</span><button class="linkbtn small" data-act="norespond" data-id="${c.id}">Recordármelo en 2 días</button></div>`;
   const reconnect = s==='reconnect';
   const tpl = reconnect ? RECONNECT : st.msg;
   const msgBox = tpl ? `<label class="f">Mensaje (puedes editarlo)<textarea class="in" id="msg" data-id="${c.id}">${esc(fill(tpl,c))}</textarea></label>
-     <div class="btn-pair"><a class="btn wa" id="wa" href="${esc(waHref(c,fill(tpl,c)))}" target="_blank" rel="noopener" data-act="sent" data-id="${c.id}" data-re="${reconnect?1:0}">${IC.wa}WhatsApp</a><button class="btn ghost" data-act="copymsg">${IC.copy}Copiar</button></div>` : '';
+     <div class="btn-pair"><a class="btn wa" id="wa" href="${esc(waHref(c,fill(tpl,c)))}" target="_blank" rel="noopener" data-act="sent" data-id="${c.id}" data-re="${reconnect?1:0}">${IC.wa}WhatsApp</a><button class="btn ghost" data-act="copymsg">${IC.copy}Copiar</button></div>
+     ${s==='final'||(isLive(st)&&c.sent)||s==='testwait'?'':`<button class="linkbtn small" style="align-self:center" data-act="sent" data-id="${c.id}" data-re="${reconnect?1:0}" data-manual="1">Ya lo envié de otra forma ✓</button>`}
+     <p class="muted small" style="margin:0;text-align:center">${reconnect?'Al enviarlo, mañana retomas el paso que le tocaba.':st.kind==='test'?'Al responder el test, avanza solo al paso 4.':isLive(st)?'Después de la reunión, avanza solo al siguiente paso.':'Al enviarlo, pasa solo al paso '+(c.paso+1)+'.'}</p>` : '';
   let body='';
   if(st.instr) body+=`<div class="instr"><b>Qué hacer:</b> ${esc(st.instr)}${c.tipo==='cliente'&&c.paso===1?` <a href="${esc(S.links.academia)}" target="_blank" rel="noopener">Abrir Academia K-WAM</a>`:''}</div>`;
   if(st.kind==='test') body+=`<div class="instr">El prospecto responde 7 preguntas desde su celular. Al terminar, su tipo de piel aparece aquí y queda listo el paso 4.</div><button class="btn soft" data-act="test" data-id="${c.id}">Ver el test como lo ve ${esc(c.nombre.split(' ')[0])}</button>`;
@@ -752,7 +790,7 @@ function stepCard(c,st,s){
   if(st.kind==='obj') body+=`<div class="instr">Pregunta con calma qué le impide decidir. Marca la objeción en la sección <b>Objeción</b> de más abajo y usa la respuesta sugerida. Cuando la resuelvas, avanza al paso 7.</div><button class="btn" data-act="adv" data-id="${c.id}">Objeción trabajada → Paso 7</button>`;
   return `<section class="stepcard"><div class="row" style="justify-content:space-between"><span class="eyebrow">Paso ${c.paso} · ${reconnect?'Reconectar':'Acción de hoy'}</span>${st.cierre?'<span class="pill cierre">Cierre</span>':''}</div>
     <h3 class="display">${esc(st.t)}</h3>${state}${ancla}${body}${(isLive(st)&&!c.agenda)?'':msgBox}
-    ${s==='todo'&&!isLive(st)&&st.kind!=='obj'?`<button class="linkbtn small" style="align-self:flex-start" data-act="adv" data-id="${c.id}">Saltar al paso siguiente →</button>`:''}</section>`;
+    ${(s==='todo'||s==='later')&&!isLive(st)&&st.kind!=='obj'?`<button class="linkbtn small" style="align-self:flex-start" data-act="adv" data-id="${c.id}">Saltar al paso siguiente →</button>`:''}</section>`;
 }
 function agendaForm(c,st){
   const a=c.agenda||{};
@@ -1066,11 +1104,11 @@ function tutSlides(){
         <div class="warn small">Si te avisa que <b>falta el nombre</b>, guarda primero el contacto en tu teléfono con su nombre y vuelve a sacar la captura.</div>`},
     {ic:IC.hoy,t:'Cada día, abre "Hoy"',d:'Es tu lista de tareas del día. Hazlas de arriba hacia abajo.',
       body:`<div class="tut-demo"><div class="task" style="pointer-events:none"><div class="th" style="display:flex;gap:12px;align-items:center;padding:12px"><span class="cnt">3</span><span class="tt"><b>Enviar: Película de RIMAN</b><span>Clientes · paso 2</span></span></div></div>
-        <div class="task" style="pointer-events:none"><div class="th" style="display:flex;gap:12px;align-items:center;padding:12px"><span class="cnt q">2</span><span class="tt"><b>¿Te respondieron?</b><span>Un toque por persona</span></span></div></div></div>
-        <ol class="tut-steps"><li>Toca una tarea para ver a quiénes les toca.</li><li>Cuando te pregunte <b>"¿Te respondieron?"</b>, contesta con un toque: <b>Sí</b> avanza al siguiente paso, <b>Aún no</b> te lo recuerda en 2 días.</li><li>El aviso 🔥 te muestra a los que están listos para cerrar.</li></ol>`},
+        <div class="task" style="pointer-events:none"><div class="th" style="display:flex;gap:12px;align-items:center;padding:12px"><span class="cnt r">2</span><span class="tt"><b>Reconectar</b><span>No han respondido: un mensaje suave</span></span></div></div></div>
+        <ol class="tut-steps"><li>Toca una tarea para ver a quiénes les toca.</li><li>Al enviar cada paso, la persona <b>avanza sola</b> en el embudo y su siguiente paso aparece aquí <b>al día siguiente</b>.</li><li>Si alguien no ha respondido, toca <b>"Recordármelo en 2 días"</b> y la app te avisará para reconectar con un mensaje suave.</li><li>El aviso 🔥 te muestra a los que están listos para cerrar.</li></ol>`},
     {ic:IC.wa,t:'Envía cada paso por WhatsApp',d:'Al abrir un prospecto, la app ya tiene el mensaje escrito para el paso que le toca.',
       body:`<div class="tut-demo" style="pointer-events:none"><div class="btn-pair"><span class="btn wa">${IC.wa}WhatsApp</span><span class="btn ghost">${IC.copy}Copiar</span></div></div>
-        <ol class="tut-steps"><li>Revisa el mensaje. Puedes cambiarlo si quieres.</li><li>Toca <b>WhatsApp</b>: se abre el chat con el mensaje listo. Solo presiona enviar.</li><li>Si el paso dice <b>"Qué hacer"</b>, sigue esa instrucción antes de enviar.</li></ol>`},
+        <ol class="tut-steps"><li>Revisa el mensaje. Puedes cambiarlo si quieres.</li><li>Toca <b>WhatsApp</b>: se abre el chat con el mensaje listo. Solo presiona enviar. La persona pasa sola al siguiente paso.</li><li>Si el paso dice <b>"Qué hacer"</b>, sigue esa instrucción antes de enviar.</li></ol>`},
     {ic:IC.pen,t:'Anota lo que sientes y lo que dijo',d:'Dentro de cada prospecto tienes tres herramientas para no olvidar nada.',
       body:`<ol class="tut-steps"><li><b>Termómetro:</b> mueve la barra de frío a caliente según cuántas ganas le ves. Desde 80% la app te sugiere ir directo al cierre.</li>
         <li><b>Ancla de memoria:</b> escribe algo especial que te contó. La app te lo recuerda cada vez que le escribas.</li>
@@ -1078,7 +1116,7 @@ function tutSlides(){
         <div class="tut-demo" style="pointer-events:none"><div class="thermo"><input type="range" value="80" tabindex="-1" aria-hidden="true"></div></div>`},
     {ic:IC.embudo,t:'Mira tu embudo y empuja',d:'En <b>Embudo</b> ves cuántas personas tienes en cada paso. Tu meta es moverlas hacia el cierre.',
       body:`<div class="tut-demo" style="pointer-events:none"><div class="funnel">${[['Testimonio',8],['Película RIMAN',6],['Test de piel',4],['Recomendación',3],['Zoom de cierre',2]].map((r,i)=>`<div class="fr"><span class="n num">${i+1}</span><span class="bw"><span class="bl">${r[0]}</span><span class="bar"><i style="width:${r[1]/8*100}%;${i===4?'background:var(--green)':''}"></i></span></span><span class="c num">${r[1]}</span></div>`).join('')}</div></div>
-        <ol class="tut-steps"><li>Toca un paso para ver quiénes están ahí.</li><li>Usa <b>Avanzar →</b> cuando ya hiciste ese paso con la persona.</li></ol>`},
+        <ol class="tut-steps"><li>Toca un paso para ver quiénes están ahí.</li><li>Las personas avanzan solas cuando envías cada paso. Usa <b>Avanzar →</b> solo si quieres adelantar a alguien.</li></ol>`},
     {ic:IC.check,t:'¡Listo para empezar!',d:'El secreto es simple: <b>abre la app todos los días y completa tus tareas de "Hoy"</b>. El seguimiento es donde se cierran los negocios.',
       body:`<div class="okb">Puedes volver a ver este tutorial cuando quieras en <b>Ajustes → Ver tutorial</b>.</div>`}
   ];
@@ -1120,17 +1158,21 @@ document.addEventListener('click',e=>{
       if(r==='aun'){ c.espera=addDays(TODAY,2); log(c,'Sin respuesta, reconectar en 2 días'); toast('Te lo recordaré en 2 días'); }
       if(r==='no'){ c.estado='pausa'; log(c,'No le interesa por ahora'); toast('Pasó a "En pausa"'); }
       save(); render(); return; }
-    case 'held': if(el.dataset.r==='si'){ log(c,'Reunión realizada'); advance(c); toast('Avanzó al paso '+c.paso); } else { c.agenda=null; c.sent=null; toast('Elige una nueva fecha'); S.sel=c.id; if(!matchMedia('(min-width:900px)').matches){S.prev=S.view;S.view='ficha';} } save(); render(); return;
+    case 'fin': {
+      const r=el.dataset.r;
+      if(r==='si'){ c.estado='cerrado'; c.agenda=null; c.sent=null; log(c,'¡Cerró en la reunión!'); toast('¡Felicitaciones por el cierre! 🎉'); }
+      else if(r==='no'){ if(c.paso>=7){ c.estado='pausa'; c.agenda=null; log(c,'No cerró · en pausa'); toast('Pasó a "En pausa"'); } else { log(c,'No cerró en la reunión'); advance(c,TODAY); toast('Pasó al paso '+c.paso+': '+step(c).t); } }
+      else { c.agenda=null; c.sent=null; log(c,'La reunión no se hizo · reagendar'); toast('Elige una nueva fecha'); S.sel=c.id; if(!matchMedia('(min-width:900px)').matches){S.prev=S.view;S.view='ficha';} }
+      save(); render(); return; }
+    case 'norespond': c.recon=true; c.desde=addDays(TODAY,2); log(c,'Sin respuesta · reconectar en 2 días'); save(); toast('Te lo recordaré en 2 días con un mensaje suave'); render(); return;
     case 'sent': {
-      const re=el.dataset.re==='1';
-      c.sent=TODAY; if(re) c.espera=null;
-      log(c,re?'Mensaje de reconexión enviado':'Paso '+c.paso+' enviado');
-      save(); setTimeout(render,400); return; }
+      markSent(c, el.dataset.re==='1');
+      save(); if(el.dataset.manual) render(); else setTimeout(render,400); return; }
     case 'copymsg': { const m=$('#msg'); if(m) copyText(m.value); return; }
     case 'copy': copyText(el.dataset.t); return;
     case 'tip': { c.ancla=(c.ancla?c.ancla.replace(/\s*$/,'')+'. ':'')+el.dataset.t; save(); render(); return; }
     case 'obj': c.obj=c.obj===el.dataset.v?null:el.dataset.v; if(c.obj) log(c,'Objeción: '+objByKey(c.obj).n); save(); render(); return;
-    case 'piel': c.piel=el.dataset.v; save(); render(); return;
+    case 'piel': c.piel=el.dataset.v; if(c.estado==='activo'&&c.tipo==='cliente'&&c.paso===3){ log(c,'Tipo de piel elegido a mano'); advance(c,TODAY); toast('Pasó al paso 4: recomendación'); } save(); render(); return;
     case 'estado': c.estado=el.dataset.v; if(c.estado==='activo'){c.sent=null;c.espera=null;} log(c,c.estado==='cerrado'?'Marcado como cerrado':c.estado==='pausa'?'Puesto en pausa':'Seguimiento reactivado'); save(); toast(c.estado==='cerrado'?'¡Felicitaciones por el cierre!':'Listo'); render(); return;
     case 'del': S.confirmDel=id; render(); return;
     case 'delno': S.confirmDel=null; render(); return;
